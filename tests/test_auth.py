@@ -1,3 +1,4 @@
+import dataclasses
 import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -252,3 +253,26 @@ async def test_delete_chain(cfg: AuthConfig) -> None:
     assert await proxy._upstream_token_store.get(key="up1") is None
     assert await proxy._jti_mapping_store.get(key="jti1") is None
     assert await delete_chain(proxy, jwt) is False
+
+
+def test_firestore_store_sanitizes_url_keys(
+    cfg: AuthConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A CIMD client_id is a URL; unsanitized, Firestore reads its slashes as a document path
+    and every /authorize request fails with 500 (seen live on the first CIMD sign-in)."""
+    captured: dict[str, object] = {}
+
+    class FakeFirestoreStore(MemoryStore):  # a real store, so the wrapper's type checks pass
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+            super().__init__()
+
+    monkeypatch.setattr(auth, "FirestoreStore", FakeFirestoreStore)
+    firestore_cfg = dataclasses.replace(cfg, token_store="firestore", google_cloud_project="p")
+    make_store(firestore_cfg)
+
+    key_strategy = captured["key_sanitization_strategy"]
+    assert captured["collection_sanitization_strategy"] is not None
+    doc_id = key_strategy.sanitize("https://claude.ai/oauth/mcp-oauth-client-metadata")  # type: ignore[attr-defined]
+    assert "/" not in doc_id
+    assert doc_id == key_strategy.sanitize("https://claude.ai/oauth/mcp-oauth-client-metadata")  # type: ignore[attr-defined]

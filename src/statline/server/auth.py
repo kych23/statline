@@ -22,6 +22,10 @@ from key_value.aio.stores.filetree import (
     FileTreeV1KeySanitizationStrategy,
 )
 from key_value.aio.stores.firestore import FirestoreStore
+from key_value.aio.stores.firestore.store import (
+    FirestoreV1CollectionSanitizationStrategy,
+    FirestoreV1KeySanitizationStrategy,
+)
 from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
 
 from statline.server.auth_config import AuthConfig
@@ -122,7 +126,12 @@ class YahooOAuthProxy(OAuthProxy):
 def make_store(cfg: AuthConfig) -> FernetEncryptionWrapper:
     inner: AsyncKeyValue
     if cfg.token_store == "firestore":
-        inner = FirestoreStore(project=cfg.google_cloud_project)
+        # Keys can be URLs (a CIMD client_id is one); Firestore reads "/" as a path separator.
+        inner = FirestoreStore(
+            project=cfg.google_cloud_project,
+            key_sanitization_strategy=FirestoreV1KeySanitizationStrategy(),
+            collection_sanitization_strategy=FirestoreV1CollectionSanitizationStrategy(),
+        )
     else:
         directory = Path(cfg.token_dir)
         directory.mkdir(parents=True, exist_ok=True)
