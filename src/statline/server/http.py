@@ -72,7 +72,7 @@ def build_http_app(data: ServerData) -> Starlette:
             )
         )
 
-    async def healthz(request: Request) -> JSONResponse:
+    async def health(request: Request) -> JSONResponse:
         return JSONResponse(
             {
                 "ok": True,
@@ -83,5 +83,6 @@ def build_http_app(data: ServerData) -> Starlette:
         )
 
     app.add_route("/", landing, methods=["GET"])
-    app.add_route("/healthz", healthz, methods=["GET"])
+    # not /healthz: Cloud Run reserves paths ending in "z" for its own front end
+    app.add_route("/health", health, methods=["GET"])
     return app

@@ -41,9 +41,9 @@ async def test_landing_page_shows_connector_url_and_season(data: ServerData) -> 
 
 
 @pytest.mark.anyio
-async def test_healthz(data: ServerData) -> None:
+async def test_health(data: ServerData) -> None:
     async with http_client(data) as client:
-        resp = await client.get("/healthz")
+        resp = await client.get("/health")
     assert resp.json() == {"ok": True, "season": 2026, "as_of_week": 9, "data_date": "2026-11-01"}
 
 

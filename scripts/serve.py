@@ -1,4 +1,4 @@
-"""Serve Statline over HTTP (landing page, /healthz, MCP at /mcp)."""
+"""Serve Statline over HTTP (landing page, /health, MCP at /mcp)."""
 
 import logging
 import os
