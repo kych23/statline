@@ -11,3 +11,9 @@ wheels/
 
 # Secrets
 .env
+
+# Generated data
+data/
+
+# Guiding documents
+docs/

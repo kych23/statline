@@ -5,10 +5,19 @@ description = "Fantasy football projections and league context for AI chatbot vi
 readme = "README.md"
 authors = [{ name = "Kyle Chu", email = "kyleghchu@gmail.com" }]
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = [
+    "nflreadpy>=0.1.5",
+    "pandas>=3.1.1",
+    "pyarrow>=26.0.1",
+]
 
 [dependency-groups]
-dev = ["pytest", "ruff", "pyright"]
+dev = [
+    "pytest",
+    "ruff",
+    "pyright",
+    "pandas-stubs>=3.1.0.261029",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.7,<0.10.0"]
