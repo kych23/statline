@@ -40,6 +40,11 @@ def _synthetic(seed: int = 0) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 @pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+@pytest.fixture
 def synthetic() -> Callable[..., tuple[pd.DataFrame, pd.DataFrame]]:
     """Factory: synthetic(seed=0) -> (projections, adp) for ~250 players."""
     return _synthetic

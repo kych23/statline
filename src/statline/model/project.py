@@ -5,7 +5,17 @@ import pandas as pd
 from statline.model.evaluate import Method, trainable
 from statline.model.train import quantile_gbm
 
-OUTPUT_COLUMNS = ["player_id", "name", "position", "team", "as_of_week", "p10", "p50", "p90"]
+OUTPUT_COLUMNS = [
+    "player_id",
+    "season",
+    "name",
+    "position",
+    "team",
+    "as_of_week",
+    "p10",
+    "p50",
+    "p90",
+]
 
 
 def project(

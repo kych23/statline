@@ -29,3 +29,4 @@ def test_project_trains_on_past_seasons_and_keeps_players_with_unknown_futures()
     assert out["player_id"].tolist() == ["d"]  # live row kept despite ros_games == 0
     assert out.loc[0, "p50"] == 15.0  # mean of a and c only: b excluded, 2026 excluded
     assert list(out.columns) == OUTPUT_COLUMNS
+    assert out.loc[0, "season"] == 2026
