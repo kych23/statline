@@ -40,8 +40,8 @@ It signs you in with Yahoo (read-only) and adds league tools on top of the three
 
 | Tool | What it returns |
 |:--|:--|
-| `my_league` | Your leagues, scoring (flags non-PPR), standings, and your roster with projections |
-| `free_agents` | The best available players in your league, ranked by VOR, with injury status |
+| `my_league` | Your leagues, scoring (flags non-PPR), standings, and your roster with projections, bye weeks, IR eligibility and IR slots used |
+| `free_agents` | The best available players in your league, ranked by VOR, with injury status, bye week and IR eligibility |
 | `delete_my_data` | Deletes your stored tokens and cached Yahoo data |
 
 Statline is an OAuth proxy between Claude and Yahoo: Claude receives Statline's own token and

@@ -136,13 +136,19 @@ async def _my_league(
                     "position": p["position"],
                     "nfl_team": p["nfl_team"],
                     "status": p["status"],
+                    "bye_week": p["bye_week"],
+                    "ir_eligible": p["ir_eligible"],
+                    "selected_position": p["selected_position"],
                     **_projection_fields(row),
                 }
             )
+    ir_used = sum(1 for p in roster if p["selected_position"] == "IR")
     return {
         "league_key": key,
         **_scoring(settings),
+        "current_week": settings["current_week"],
         "roster_slots": settings["roster_slots"],
+        "ir_slots": {"total": settings["roster_slots"].get("IR", 0), "used": ir_used},
         "standings": standings,
         "my_team": team,
         "roster": roster,
@@ -191,6 +197,8 @@ async def _free_agents(
                     "nfl_team": p["nfl_team"],
                     "status": p["status"],
                     "percent_owned": p["percent_owned"],
+                    "bye_week": p["bye_week"],
+                    "ir_eligible": p["ir_eligible"],
                     **fields,
                 },
             )
@@ -200,6 +208,7 @@ async def _free_agents(
         "league_key": league_key,
         "position": position,
         **_scoring(settings),
+        "current_week": settings["current_week"],
         "free_agents": [row for _, row in matched[:top_n]],
         "unprojected": len(available) - len(matched),
         "as_of": as_of(data),
@@ -242,7 +251,9 @@ def register_league(
     ) -> dict[str, Any]:
         """Your Yahoo fantasy league: scoring, standings and your roster. Each rostered player
         carries a projection (p10/p50/p90: rest-of-season average PPR points per game, not
-        weekly scores) and vor (value over replacement, same unit); null if unprojected."""
+        weekly scores) and vor (value over replacement, same unit); null if unprojected.
+        bye_week vs current_week tells whether a player is on bye; ir_eligible is Yahoo's own
+        IR eligibility for this league; ir_slots counts IR spots total and used."""
         if (ctx := client_for()) is None:
             return login_required
         return await my_league(data, ctx[0], league_key)
@@ -265,7 +276,8 @@ def register_league(
         (vor) computed from rest-of-season average PPR points per game projections (p10/p50/p90, a
         range for the average, not weekly scores). Draws
         from Yahoo's 50 most-owned available players; 'unprojected' counts the ones skipped
-        for lacking a projection."""
+        for lacking a projection. bye_week vs current_week tells whether a player is on bye;
+        ir_eligible is Yahoo's own IR eligibility for this league."""
         if (ctx := client_for()) is None:
             return login_required
         return await free_agents(data, ctx[0], league_key, position, top_n)

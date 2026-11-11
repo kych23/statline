@@ -45,6 +45,11 @@ CLIENT_REDIRECTS = [
 ]
 FRESH_S = 300  # a positive verification is trusted this long
 STALE_S = 1800  # and served during a Yahoo throttle or outage up to this age
+# Lifetime of the access token Claude holds. It is a reference token: every request re-checks
+# the stored Yahoo token (refreshed server-side) and delete_my_data revokes it at once. A long
+# TTL means Claude rarely refreshes, and each refresh rotates a single-use refresh token: a
+# client replaying a pre-rotation token gets invalid_grant and must sign in again.
+ACCESS_TOKEN_TTL_S = 7 * 24 * 3600
 
 
 class YahooTokenVerifier(TokenVerifier):
@@ -161,7 +166,7 @@ def build_auth(
         allowed_client_redirect_uris=CLIENT_REDIRECTS,
         jwt_signing_key=cfg.jwt_signing_key,
         client_storage=store or make_store(cfg),
-        fastmcp_access_token_expiry_seconds=3600,
+        fastmcp_access_token_expiry_seconds=ACCESS_TOKEN_TTL_S,
         token_expiry_threshold_seconds=120,
     )
     # required_scopes normalizes to [] (4.x too; the valid_scopes arg treats [] as unset), so

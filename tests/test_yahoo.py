@@ -80,7 +80,15 @@ def test_guid_and_leagues_newest_season_first() -> None:
 def test_settings_ppr_detection_and_slots() -> None:
     full = parse_settings(fx("settings_full.json"))
     assert full["ppr"] == "full" and full["reception_points"] == 1.0
-    assert full["roster_slots"] == {"QB": 1, "WR": 2, "RB": 2, "TE": 1, "W/R/T": 1, "BN": 6}
+    assert full["roster_slots"] == {
+        "QB": 1,
+        "WR": 2,
+        "RB": 2,
+        "TE": 1,
+        "W/R/T": 1,
+        "BN": 6,
+        "IR": 2,
+    }
     assert parse_settings(fx("settings_half.json"))["ppr"] == "half"
     none = parse_settings(settings_payload((4, "0.04")))
     assert none["ppr"] == "none" and none["reception_points"] == 0.0
@@ -116,6 +124,46 @@ def test_players_roster_and_free_agents() -> None:
     assert [p["name"] for p in agents] == ["Rico Dowdle", "Hurt Receiver"]
     assert agents[0]["percent_owned"] == 41.5
     assert agents[1]["status"] == "Q" and agents[1]["percent_owned"] == 12.0
+
+
+def test_players_bye_ir_and_selected_position() -> None:
+    allen, nobody = parse_players(fx("roster.json"))
+    assert (allen["bye_week"], allen["ir_eligible"], allen["selected_position"]) == (7, False, "QB")
+    # No bye_weeks (None), IR in a {"position": [...]} eligible shape, benched to the IR slot.
+    assert (nobody["bye_week"], nobody["ir_eligible"], nobody["selected_position"]) == (
+        None,
+        True,
+        "IR",
+    )
+    dowdle, hurt = parse_players(fx("players.json"))
+    assert (dowdle["bye_week"], dowdle["ir_eligible"], dowdle["selected_position"]) == (
+        12,
+        False,
+        None,
+    )
+    assert (hurt["bye_week"], hurt["ir_eligible"]) == (None, True)
+
+
+def test_players_tolerate_malformed_bye_and_eligibility() -> None:
+    payload = {
+        "player": [
+            {"name": {"full": "A"}},
+            {"bye_weeks": "nope"},
+            {"eligible_positions": 7},
+            {"selected_position": "BN"},
+        ]
+    }
+    (player,) = parse_players(payload)
+    assert player["bye_week"] is None and player["ir_eligible"] is False
+    assert player["selected_position"] is None
+
+
+def test_settings_current_week() -> None:
+    assert parse_settings(fx("settings_full.json"))["current_week"] == 10
+    assert parse_settings(settings_payload((11, "1")))["current_week"] is None
+    league = {"league": [{"league_key": "461.l.1", "current_week": 3}]}
+    assert parse_settings(league)["current_week"] == 3
+    assert parse_settings({"league": [{"current_week": "x"}]})["current_week"] is None
 
 
 @pytest.mark.parametrize("bad", ["461.l.123\n", "461.l.123/../x", "", "461.l.", "461.l.1.t.2"])

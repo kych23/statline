@@ -99,7 +99,29 @@ async def test_my_league_auto_picks_single_league_and_matches_roster(data: Serve
     assert out["as_of"] == {"season": 2026, "week": 9, "data_date": "2026-11-01"}
     assert out["attribution"] == ATTRIBUTION
     assert out["standings"]
+    assert out["current_week"] == 10
+    assert out["ir_slots"] == {"total": 2, "used": 1}
+    assert (allen["bye_week"], allen["ir_eligible"], allen["selected_position"]) == (7, False, "QB")
+    assert (nobody["bye_week"], nobody["ir_eligible"], nobody["selected_position"]) == (
+        None,
+        True,
+        "IR",
+    )
     no_adp(out)
+
+
+@pytest.mark.anyio
+async def test_my_league_ir_slots_default_to_zero_without_ir(data: ServerData) -> None:
+    def no_ir(path: str) -> httpx2.Response | None:
+        if path.endswith("/settings"):
+            text = (FIXTURES / "settings_full.json").read_text()
+            text = text.replace(',{"roster_position":{"position":"IR","count":2}}', "")
+            return httpx2.Response(200, text=text)
+        return None
+
+    client, _ = make_client(no_ir)
+    out = await my_league(data, client, KEY)
+    assert out["ir_slots"] == {"total": 0, "used": 1}
 
 
 @pytest.mark.anyio
@@ -148,6 +170,8 @@ async def test_free_agents_rank_by_vor_and_count_unprojected(data: ServerData) -
         "nfl_team",
         "status",
         "percent_owned",
+        "bye_week",
+        "ir_eligible",
         "projection",
         "vor",
     }
@@ -157,6 +181,35 @@ async def test_free_agents_rank_by_vor_and_count_unprojected(data: ServerData) -
     williams = next(p for p in full["free_agents"] if p["name"] == "Tyler Williams")
     assert williams["status"] == "Q" and williams["percent_owned"] == 20.0
     assert williams["projection"]["p50"] == 8.0
+    assert out["current_week"] == 10
+
+
+@pytest.mark.anyio
+async def test_free_agents_carry_bye_week_and_ir_eligibility(data: ServerData) -> None:
+    def payload(path: str) -> httpx2.Response | None:
+        if "/players" not in path:
+            return None
+        extras: list[list[dict[str, Any]]] = [
+            [{"bye_weeks": {"week": "6"}}, {"eligible_positions": [{"position": "RB"}]}],
+            [{"eligible_positions": [{"position": "RB"}, {"position": "IR"}]}],
+        ]
+        players: dict[str, Any] = {
+            str(i): {"player": [[{"name": {"full": name}}, {"display_position": "RB"}, *frags]]}
+            for i, (name, frags) in enumerate(
+                zip(("Josh Jacobs", "Brock Bowers"), extras, strict=True)
+            )
+        }
+        players["count"] = 2
+        body = {"fantasy_content": {"league": [{"league_key": KEY}, {"players": players}]}}
+        return httpx2.Response(200, json=body)
+
+    client, _ = make_client(payload)
+    out = await free_agents(data, client, KEY, None, 25)
+    by_name = {p["name"]: p for p in out["free_agents"]}
+    assert (by_name["Josh Jacobs"]["bye_week"], by_name["Josh Jacobs"]["ir_eligible"]) == (6, False)
+    assert out["current_week"] == 10
+    assert by_name["Brock Bowers"]["bye_week"] is None
+    assert by_name["Brock Bowers"]["ir_eligible"] is True
 
 
 @pytest.mark.anyio

@@ -58,6 +58,29 @@ def _float(value: Any) -> float | None:
         return None
 
 
+def _positions(value: Any) -> list[str]:
+    """Every `position` string under an eligible_positions value, whatever the nesting."""
+    found: list[str] = []
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            if key == "position" and isinstance(child, str):
+                found.append(child)
+            elif key == "position" and isinstance(child, list):
+                found.extend(str(c) for c in child if isinstance(c, str))
+                found.extend(_positions(child))
+            else:
+                found.extend(_positions(child))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_positions(child))
+    return found
+
+
+def _selected_position(value: Any) -> str | None:
+    position = _merge(value).get("position")
+    return str(position) if position else None
+
+
 def parse_guid(payload: Any) -> str | None:
     guid = _first(payload, "user").get("guid")
     return str(guid) if guid else None
@@ -78,7 +101,7 @@ def parse_leagues(payload: Any) -> list[dict]:
 
 
 def parse_settings(payload: Any) -> dict:
-    """Roster slots and a PPR label from the reception stat modifier (stat_id 11)."""
+    """Roster slots, current week and a PPR label from the reception stat modifier (stat_id 11)."""
     slots: dict[str, int] = {}
     for rp in iter_nodes(payload, "roster_position"):
         if pos := rp.get("position"):
@@ -88,7 +111,20 @@ def parse_settings(payload: Any) -> dict:
         if str(stat.get("stat_id")) == RECEPTION_STAT_ID:
             reception = _float(stat.get("value")) or 0.0
     ppr = {1.0: "full", 0.5: "half", 0.0: "none"}.get(reception, f"{reception:g}")
-    return {"roster_slots": slots, "ppr": ppr, "reception_points": reception}
+    current_week = next(
+        (
+            w
+            for lg in iter_nodes(payload, "league")
+            if (w := _int(lg.get("current_week"))) is not None
+        ),
+        None,
+    )
+    return {
+        "roster_slots": slots,
+        "ppr": ppr,
+        "reception_points": reception,
+        "current_week": current_week,
+    }
 
 
 def parse_standings(payload: Any) -> list[dict]:
@@ -138,6 +174,9 @@ def parse_players(payload: Any) -> list[dict]:
                 "nfl_team": p.get("editorial_team_abbr"),
                 "status": p.get("status") or None,
                 "percent_owned": _float(owned_value),
+                "bye_week": _int(_merge(p.get("bye_weeks")).get("week")),
+                "ir_eligible": "IR" in _positions(p.get("eligible_positions")),
+                "selected_position": _selected_position(p.get("selected_position")),
             }
         )
     return players
