@@ -8,7 +8,7 @@ about players, mock drafts, or your Yahoo league. Projections are quantile forec
 (10th/50th/90th percentile points per game) from a gradient-boosted model trained on
 nflverse data.
 
-**Status:** milestone 2 of 5 (projections). Next: draft logic (value over replacement, mock draft).
+**Status:** milestone 3 of 5 (draft logic). Next: MCP server with a public demo endpoint.
 
 ## Projections
 
@@ -58,3 +58,36 @@ uv run pytest        # tests
 uv run ruff check    # lint
 uv run pyright       # type check
 ```
+
+
+## Mock draft
+
+Simulates a 12-team snake draft (settings in `config/league.yaml`) from your seat.
+
+```sh
+uv run python scripts/build.py --season 2026 --as-of-week 0 --output data/projections_2026_w0.parquet
+uv run python scripts/mock.py --seat 4 --seed 7 --projections data/projections_2026_w0.parquet
+```
+
+```
+ round  pick_no                name position  p50  vor
+     1        4  Jaxon Smith-Njigba       WR 16.9  7.1
+     2       21        Trey McBride       TE 15.3  5.9
+     3       28       Davante Adams       WR 13.9  4.1
+     4       45    Javonte Williams       RB 12.5  3.1
+   ...
+```
+
+- **Your picks** maximize the gain to your starting lineup, measured as value over
+  replacement (VOR): projected points minus the best player left unstarted league-wide at
+  that slot. FLEX gets its own replacement level, since a TE there competes with RBs and
+  WRs. A small credit for bench depth breaks late-round ties.
+- **Opponents** pick from ADP (average draft position, Fantasy Football Calculator) with
+  noise: P(player) ∝ exp(−ADP / τ), where τ = 1 + 0.07 × pick number. The randomness grows
+  through the draft, as it does in real drafts. τ was fitted so simulated pick spreads
+  match real ones from thousands of drafts, 2016-2026 (e.g. 1.6 vs 1.6 picks for ADP
+  1-12, 13.8 vs 14.2 for ADP 121+).
+- Every team fills a legal starting lineup (position caps, plus a must-fill rule near the
+  end), and the same seed replays the same draft.
+- ADP is used only to drive opponents and is never displayed. The cached board is local
+  and not committed.

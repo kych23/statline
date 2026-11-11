@@ -119,7 +119,10 @@ def _my_pick(
             - base
         )
         vor = all_vor[r]
-        scores.append(gain + DEPTH_WEIGHT * (0.0 if np.isnan(vor) else max(vor, 0.0)))
+        if np.isnan(vor):  # unprojected: only when nothing projected is left (handled above)
+            scores.append(-np.inf)
+            continue
+        scores.append(gain + DEPTH_WEIGHT * max(vor, 0.0))
     return int(rows[int(np.argmax(scores))])
 
 

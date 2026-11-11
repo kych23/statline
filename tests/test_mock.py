@@ -110,3 +110,19 @@ def test_mock_draft_requires_replacement_levels() -> None:
     board = pd.DataFrame({"position": ["QB"], "adp": [1.0]})
     with pytest.raises(ValueError, match="replacement"):
         mock_draft(board, LEAGUE, seat=1, seed=0)
+
+
+def test_seat_never_prefers_an_unprojected_player() -> None:
+    """Late in a draft every candidate scores ~0; the tie must not go to a player with no
+    projection just because he has a better ADP."""
+    league = load_league(REPO / "config" / "league.yaml")
+    board = pd.DataFrame(
+        {
+            "position": ["RB", "RB"],
+            "adp": [150.0, 160.0],
+            "p50": [np.nan, 5.0],
+            "vor": [np.nan, -3.0],
+        }
+    )
+    levels = {"QB": 16.0, "RB": 10.0, "WR": 10.0, "TE": 8.0, "FLEX": 10.0}
+    assert _my_pick(np.array([0, 1]), board, False, [], league, levels) == 1
