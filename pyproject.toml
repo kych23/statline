@@ -29,6 +29,9 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["statline"]
+
 [tool.pyright]
 typeCheckingMode = "basic"
 include = ["src", "tests"]
