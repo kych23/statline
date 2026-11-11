@@ -5,6 +5,7 @@ from statline.data.nflverse import (
     clean_rosters,
     clean_snaps,
     clean_weekly,
+    completed_weeks,
 )
 
 
@@ -67,3 +68,42 @@ def test_clean_rosters_drops_missing_ids_and_duplicates() -> None:
     )
     out = clean_rosters(raw)
     assert out["player_id"].tolist() == ["00-1"]
+
+
+def schedule(*games: tuple[str, int, bool]) -> pd.DataFrame:
+    """(game_type, week, played) rows; unplayed games have no score yet."""
+    return pd.DataFrame(
+        {
+            "game_type": [g[0] for g in games],
+            "week": [g[1] for g in games],
+            "home_score": [24.0 if g[2] else None for g in games],
+            "away_score": [17.0 if g[2] else None for g in games],
+        }
+    )
+
+
+def test_completed_weeks_all_played_is_last_week() -> None:
+    assert completed_weeks(schedule(("REG", 1, True), ("REG", 2, True), ("REG", 3, True))) == 3
+
+
+def test_completed_weeks_partial_current_week_does_not_count() -> None:
+    games = schedule(("REG", 1, True), ("REG", 2, True), ("REG", 3, True), ("REG", 3, False))
+    assert completed_weeks(games) == 2
+
+
+def test_completed_weeks_stops_at_gap_even_if_later_game_is_played() -> None:
+    games = schedule(("REG", 1, True), ("REG", 2, False), ("REG", 2, True), ("REG", 3, True))
+    assert completed_weeks(games) == 1
+
+
+def test_completed_weeks_ignores_postseason() -> None:
+    games = schedule(("REG", 1, True), ("REG", 2, True), ("WC", 1, False), ("SB", 5, False))
+    assert completed_weeks(games) == 2
+
+
+def test_completed_weeks_empty_is_zero() -> None:
+    assert completed_weeks(schedule()) == 0
+
+
+def test_completed_weeks_partial_week_one_is_zero() -> None:
+    assert completed_weeks(schedule(("REG", 1, True), ("REG", 1, False), ("REG", 2, False))) == 0

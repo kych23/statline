@@ -1,0 +1,138 @@
+name: Refresh projections
+
+on:
+  schedule:
+    - cron: "0 15 * * 2" # Tuesday 15:00 UTC, after Monday Night Football
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Deploy even if the completed week is unchanged (e.g. after a code change)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+env:
+  SEASON: 2026 # bump each season, along with the bucket file names below
+  SERVICE: statline
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev/statline-mcp/cloud-run-source-deploy/statline
+  HEALTH_URL: https://statline-471351099718.us-central1.run.app/health
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+
+      - name: Find completed week
+        id: week
+        run: |
+          week="$(uv run python scripts/build.py --season "$SEASON" --print-week)"
+          echo "completed=$week" >> "$GITHUB_OUTPUT"
+          echo "Completed regular-season weeks: $week"
+
+      - name: Read live week
+        id: live
+        run: |
+          live="$(curl --fail --silent --show-error --retry 3 "$HEALTH_URL" | jq -r '.as_of_week')"
+          echo "as_of_week=$live" >> "$GITHUB_OUTPUT"
+          echo "Live as_of_week: $live"
+
+      - name: Decide whether to deploy
+        id: decide
+        env:
+          COMPLETED: ${{ steps.week.outputs.completed }}
+          LIVE: ${{ steps.live.outputs.as_of_week }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$COMPLETED" -eq 0 ]; then
+            echo "::notice::No completed weeks yet for season $SEASON; nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          elif [ "$COMPLETED" -le "$LIVE" ] && [ "$FORCE" != "true" ]; then
+            echo "::notice::Week $COMPLETED is already live (as_of_week $LIVE); skipping."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: google-github-actions/auth@v2
+        if: steps.decide.outputs.deploy == 'true'
+        with:
+          workload_identity_provider: projects/471351099718/locations/global/workloadIdentityPools/github/providers/statline-repo
+          service_account: statline-deployer@statline-mcp.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.decide.outputs.deploy == 'true'
+
+      - name: Fetch private data
+        if: steps.decide.outputs.deploy == 'true'
+        run: |
+          mkdir -p data/raw
+          gcloud storage cp gs://statline-mcp-data/projections_2026_w0.parquet data/
+          gcloud storage cp gs://statline-mcp-data/adp_2026.parquet data/raw/
+
+      - name: Build projections
+        if: steps.decide.outputs.deploy == 'true'
+        env:
+          WEEK: ${{ steps.week.outputs.completed }}
+        run: uv run python scripts/build.py --season "$SEASON" --as-of-week "$WEEK"
+
+      - name: Quality gate
+        if: steps.decide.outputs.deploy == 'true'
+        env:
+          WEEK: ${{ steps.week.outputs.completed }}
+        run: |
+          uv run python scripts/build.py --season "$SEASON" \
+            --check data/projections.parquet --expect-week "$WEEK"
+
+      - name: Record serving revision
+        if: steps.decide.outputs.deploy == 'true'
+        run: |
+          previous="$(gcloud run services describe "$SERVICE" --region "$REGION" \
+            --format='value(status.traffic[0].revisionName)')"
+          echo "PREVIOUS_REVISION=$previous" >> "$GITHUB_ENV"
+          echo "Serving revision: $previous"
+
+      - name: Build and push image
+        if: steps.decide.outputs.deploy == 'true'
+        env:
+          WEEK: ${{ steps.week.outputs.completed }}
+        run: |
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+          image="$REGISTRY:${GITHUB_SHA::7}-w$WEEK"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          docker build --tag "$image" .
+          docker push "$image"
+
+      - name: Deploy
+        if: steps.decide.outputs.deploy == 'true'
+        run: gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" --quiet
+
+      - name: Smoke test
+        if: steps.decide.outputs.deploy == 'true'
+        env:
+          WEEK: ${{ steps.week.outputs.completed }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            health="$(curl --fail --silent "$HEALTH_URL" || true)"
+            echo "Attempt $attempt: $health"
+            if [ "$(jq -r '.ok' <<<"$health" 2>/dev/null)" = "true" ] \
+              && [ "$(jq -r '.as_of_week' <<<"$health" 2>/dev/null)" = "$WEEK" ]; then
+              echo "Week $WEEK is live."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Smoke test failed; rolling back to $PREVIOUS_REVISION"
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" \
+            --to-revisions "$PREVIOUS_REVISION=100"
+          exit 1

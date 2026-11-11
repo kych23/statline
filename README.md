@@ -145,10 +145,11 @@ Secrets (Yahoo client ID/secret, JWT signing key, storage encryption key) live i
 Manager and are passed with `--set-secrets`; the service account has only
 `secretmanager.secretAccessor` and `datastore.user`.
 
-**Weekly refresh** (projections are baked into the image):
+Deploys normally happen through the weekly refresh workflow below. To deploy by hand
+(first deploy, or changing flags, env vars or secrets):
 
 ```sh
-uv run python scripts/build.py --season 2026 --as-of-week <weeks completed>
+uv run python scripts/build.py --season 2026 --as-of-week latest
 gcloud run deploy statline --source . --region us-central1 --allow-unauthenticated \
   --min-instances 0 --max-instances 1 --memory 1Gi --cpu 1 --concurrency 10 --timeout 300 \
   --set-secrets YAHOO_CLIENT_ID=YAHOO_CLIENT_ID:latest,YAHOO_CLIENT_SECRET=YAHOO_CLIENT_SECRET:latest,JWT_SIGNING_KEY=JWT_SIGNING_KEY:latest,STORAGE_ENCRYPTION_KEY=STORAGE_ENCRYPTION_KEY:latest \
@@ -157,3 +158,28 @@ gcloud run deploy statline --source . --region us-central1 --allow-unauthenticat
 
 `.gcloudignore` is an allowlist: it uploads the gitignored `data/` files the image needs and
 nothing else.
+
+## Weekly refresh
+
+`.github/workflows/refresh.yml` rebuilds and redeploys the projections every Tuesday at
+15:00 UTC (after Monday Night Football). It reads the completed regular-season weeks from
+the nflverse schedule, skips if that week is already live (`/health` `as_of_week`), and
+otherwise builds the projections, checks them, builds the image, deploys it to Cloud Run
+and smoke-tests `/health`. A deploy only swaps the image: env vars, secrets and scaling
+stay as configured.
+
+```sh
+gh workflow run refresh.yml                 # run now; skips if the week is already live
+gh workflow run refresh.yml -f force=true   # redeploy even if unchanged, e.g. after a code change
+```
+
+- **Auth:** GitHub OIDC through Workload Identity Federation to a deploy-only service
+  account. No keys are stored in the repo or in GitHub secrets.
+- **Quality gate:** `scripts/build.py --check` fails the run before anything is deployed
+  unless the file loads the way the server loads it, has at least 300 players, no null or
+  crossed p10/p50/p90, and a single `as_of_week` and season matching the expected ones.
+- **Rollback:** if `/health` does not report `ok` and the new week within about a minute
+  after deploy, traffic is shifted back to the previous revision and the run fails.
+- **Private data:** ADP and the week-0 projections (used by the mock draft board) are
+  gitignored and live in a private Cloud Storage bucket; the workflow copies them in before
+  building. Bump `SEASON` and the file names in the workflow each season.

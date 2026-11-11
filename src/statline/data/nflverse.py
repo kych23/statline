@@ -79,6 +79,22 @@ def load_rosters(seasons: Iterable[int], *, refresh: bool = False) -> pd.DataFra
     return _load("rosters", seasons, fetch, clean_rosters, refresh)
 
 
+def load_schedule(season: int) -> pd.DataFrame:
+    """Always a fresh download: the current season's scores change every week."""
+    return nfl.load_schedules([season]).to_pandas()
+
+
+def completed_weeks(schedule: pd.DataFrame) -> int:
+    """Largest regular-season week w with every game through w scored; 0 if none."""
+    games = schedule[schedule["game_type"] == "REG"]
+    played = games["home_score"].notna() & games["away_score"].notna()
+    unfinished = games.loc[~played, "week"]
+    last_week = games["week"].max() if len(games) else 0
+    if unfinished.empty:
+        return int(last_week)
+    return int(unfinished.min()) - 1
+
+
 def _load(
     name: str,
     seasons: Iterable[int],
