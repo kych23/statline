@@ -1,7 +1,6 @@
 """Everything the tools read, loaded once at startup."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -9,7 +8,7 @@ import pandas as pd
 from statline.draft.board import build_board
 from statline.draft.league import League, load_league
 from statline.draft.value import add_vor
-from statline.model.project import OUTPUT_COLUMNS
+from statline.model.schema import OUTPUT_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -18,7 +17,7 @@ class ServerData:
     league: League
     season: int
     as_of_week: int
-    data_date: str  # ISO date the projections file was written
+    data_date: str  # ISO date the projections were built
     board: pd.DataFrame | None = None  # build_board output (carries attrs["replacement"])
 
     @classmethod
@@ -40,6 +39,11 @@ class ServerData:
             raise ValueError(
                 f"{projections_path} must hold exactly one (season, as_of_week), found {len(pairs)}"
             )
+        built = projections["built_on"].unique()
+        if len(built) != 1:
+            raise ValueError(
+                f"{projections_path} must hold exactly one built_on, found {len(built)}"
+            )
         league = load_league(league_path)
         board = None
         if draft_projections_path is not None and adp_path is not None:
@@ -48,12 +52,11 @@ class ServerData:
                 raise ValueError(f"{draft_projections_path} must be preseason (as_of_week 0)")
             # Read the cached file directly: the server must never hit the network.
             board = build_board(draft, pd.read_parquet(adp_path), league)
-        mtime = datetime.fromtimestamp(projections_path.stat().st_mtime, tz=UTC)
         return cls(
             projections=add_vor(projections.reset_index(drop=True), league),
             league=league,
             season=int(pairs["season"].iloc[0]),
             as_of_week=int(pairs["as_of_week"].iloc[0]),
-            data_date=mtime.date().isoformat(),
+            data_date=str(built[0]),
             board=board,
         )

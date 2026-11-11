@@ -1,7 +1,10 @@
+from datetime import UTC, datetime
+
 import pandas as pd
 
 from statline.model.evaluate import Predictor
-from statline.model.project import OUTPUT_COLUMNS, project
+from statline.model.project import project
+from statline.model.schema import OUTPUT_COLUMNS
 
 
 def mean_method(train: pd.DataFrame) -> Predictor:
@@ -30,3 +33,4 @@ def test_project_trains_on_past_seasons_and_keeps_players_with_unknown_futures()
     assert out.loc[0, "p50"] == 15.0  # mean of a and c only: b excluded, 2026 excluded
     assert list(out.columns) == OUTPUT_COLUMNS
     assert out.loc[0, "season"] == 2026
+    assert out.loc[0, "built_on"] == datetime.now(UTC).date().isoformat()

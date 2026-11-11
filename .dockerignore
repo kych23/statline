@@ -1,0 +1,14 @@
+# Allowlist: only what the Dockerfile copies.
+**
+!pyproject.toml
+!uv.lock
+!README.md
+!.python-version
+!src/**
+!config/**
+!scripts/serve.py
+!data/projections.parquet
+!data/projections_2026_w0.parquet
+!data/raw/adp_2026.parquet
+**/__pycache__
+**/*.pyc

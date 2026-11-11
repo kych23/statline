@@ -1179,13 +1179,10 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
-    { name = "lightgbm" },
-    { name = "nflreadpy" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
     { name = "requests" },
-    { name = "scikit-learn" },
 ]
 
 [package.dev-dependencies]
@@ -1198,17 +1195,19 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-requests" },
 ]
+train = [
+    { name = "lightgbm" },
+    { name = "nflreadpy" },
+    { name = "scikit-learn" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "fastmcp", specifier = ">=4,<5" },
-    { name = "lightgbm", specifier = ">=4.7.0" },
-    { name = "nflreadpy", specifier = ">=0.1.5" },
     { name = "pandas", specifier = ">=3.1.1" },
     { name = "pyarrow", specifier = ">=26.0.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.34.2" },
-    { name = "scikit-learn", specifier = ">=1.9.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -1220,6 +1219,11 @@ dev = [
     { name = "tabulate", specifier = ">=0.10.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20261103" },
     { name = "types-requests", specifier = ">=2.33.0.20261030" },
+]
+train = [
+    { name = "lightgbm", specifier = ">=4.7.0" },
+    { name = "nflreadpy", specifier = ">=0.1.5" },
+    { name = "scikit-learn", specifier = ">=1.9.1" },
 ]
 
 [[package]]

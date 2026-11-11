@@ -1,0 +1,21 @@
+# Allowlist (gitignore semantics; does not read .gitignore). Parent dirs must be re-included.
+*
+!/pyproject.toml
+!/uv.lock
+!/README.md
+!/.python-version
+!/Dockerfile
+!/.dockerignore
+!/src/
+!/src/**
+!/config/
+!/config/**
+!/scripts/
+!/scripts/serve.py
+!/data/
+!/data/projections.parquet
+!/data/projections_2026_w0.parquet
+!/data/raw/
+!/data/raw/adp_2026.parquet
+__pycache__/
+*.pyc

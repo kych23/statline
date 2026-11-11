@@ -7,51 +7,11 @@ import pytest
 from fastmcp import Client
 
 from statline.draft.board import build_board
-from statline.draft.league import load_league
-from statline.draft.value import add_vor
 from statline.server.app import build_server
 from statline.server.data import ServerData
 from statline.server.limits import HeavyToolGate
 from statline.server.resolve import resolve
 from statline.server.tools import get_player, mock_draft, rankings
-
-ROWS = [
-    ("Josh Allen", "QB", 20.0),
-    ("Lamar Jackson", "QB", 19.0),
-    ("Jahmyr Gibbs", "RB", 18.0),
-    ("Bijan Robinson", "RB", 17.5),
-    ("Josh Jacobs", "RB", 12.0),
-    ("Chris Godwin Jr.", "WR", 14.0),
-    ("Justin Jefferson", "WR", 16.0),
-    ("Amon-Ra St. Brown", "WR", 15.5),
-    ("Mike Williams", "WR", 9.0),
-    ("Tyler Williams", "WR", 8.0),
-    ("Brock Bowers", "TE", 13.0),
-    ("Trey McBride", "TE", 12.5),
-]
-LEAGUE_PATH = Path(__file__).resolve().parents[1] / "config" / "league.yaml"
-
-
-def make_projections() -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "player_id": [f"id{i}" for i in range(len(ROWS))],
-            "season": 2026,
-            "name": [r[0] for r in ROWS],
-            "position": [r[1] for r in ROWS],
-            "team": "AAA",
-            "as_of_week": 9,
-            "p10": [r[2] - 4 for r in ROWS],
-            "p50": [r[2] for r in ROWS],
-            "p90": [r[2] + 4 for r in ROWS],
-        }
-    )
-
-
-@pytest.fixture
-def data() -> ServerData:
-    league = load_league(LEAGUE_PATH)
-    return ServerData(add_vor(make_projections(), league), league, 2026, 9, "2026-11-01")
 
 
 def name_of(data: ServerData, index: int | None) -> str:
@@ -143,18 +103,27 @@ def test_rankings_top_n_bounds(data: ServerData) -> None:
     assert len(rankings(data, top_n=3)["rankings"]) == 3
 
 
-def test_load_adds_vor_and_rejects_mixed_weeks(tmp_path: Path) -> None:
+def test_load_adds_vor_and_rejects_mixed_weeks(
+    tmp_path: Path, league_path: Path, make_projections: Callable[[], pd.DataFrame]
+) -> None:
     path = tmp_path / "projections.parquet"
     make_projections().to_parquet(path, index=False)
-    loaded = ServerData.load(path, LEAGUE_PATH)
+    loaded = ServerData.load(path, league_path)
     assert (loaded.season, loaded.as_of_week) == (2026, 9)
     assert "vor" in loaded.projections.columns
+    assert loaded.data_date == "2026-11-01"
 
     mixed = make_projections()
     mixed.loc[0, "as_of_week"] = 8
     mixed.to_parquet(path, index=False)
     with pytest.raises(ValueError, match="exactly one"):
-        ServerData.load(path, LEAGUE_PATH)
+        ServerData.load(path, league_path)
+
+    two_dates = make_projections().assign(built_on="2026-11-01")
+    two_dates.loc[0, "built_on"] = "2026-11-02"
+    two_dates.to_parquet(path, index=False)
+    with pytest.raises(ValueError, match="exactly one built_on"):
+        ServerData.load(path, league_path)
 
 
 @pytest.mark.anyio
@@ -237,7 +206,10 @@ async def test_mock_draft_over_mcp(draft_data: ServerData) -> None:
 
 
 def test_load_builds_board_from_preseason_files(
-    tmp_path: Path, synthetic: Callable[..., tuple[pd.DataFrame, pd.DataFrame]]
+    tmp_path: Path,
+    league_path: Path,
+    make_projections: Callable[[], pd.DataFrame],
+    synthetic: Callable[..., tuple[pd.DataFrame, pd.DataFrame]],
 ) -> None:
     proj, adp = synthetic()
     proj = proj.assign(season=2026)
@@ -247,11 +219,11 @@ def test_load_builds_board_from_preseason_files(
     current = tmp_path / "projections.parquet"
     make_projections().to_parquet(current, index=False)
 
-    loaded = ServerData.load(current, LEAGUE_PATH, proj_path, adp_path)
+    loaded = ServerData.load(current, league_path, proj_path, adp_path)
     assert loaded.board is not None
     assert "replacement" in loaded.board.attrs
-    assert ServerData.load(current, LEAGUE_PATH).board is None
+    assert ServerData.load(current, league_path).board is None
 
     proj.assign(as_of_week=3).to_parquet(proj_path, index=False)
     with pytest.raises(ValueError, match="as_of_week 0"):
-        ServerData.load(current, LEAGUE_PATH, proj_path, adp_path)
+        ServerData.load(current, league_path, proj_path, adp_path)

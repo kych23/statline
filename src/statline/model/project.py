@@ -1,21 +1,12 @@
 """Live projections: train on every completed season, predict one (season, as-of week)."""
 
+from datetime import UTC, datetime
+
 import pandas as pd
 
 from statline.model.evaluate import Method, trainable
+from statline.model.schema import OUTPUT_COLUMNS
 from statline.model.train import quantile_gbm
-
-OUTPUT_COLUMNS = [
-    "player_id",
-    "season",
-    "name",
-    "position",
-    "team",
-    "as_of_week",
-    "p10",
-    "p50",
-    "p90",
-]
 
 
 def project(
@@ -26,5 +17,5 @@ def project(
     train = trainable(table[table["season"] < season])
     live = table[(table["season"] == season) & (table["as_of_week"] == as_of_week)]
     pred = method(train)(live)
-    out = live.join(pred)[OUTPUT_COLUMNS]
+    out = live.join(pred).assign(built_on=datetime.now(UTC).date().isoformat())[OUTPUT_COLUMNS]
     return out.sort_values("p50", ascending=False).reset_index(drop=True)
