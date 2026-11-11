@@ -133,6 +133,21 @@ uv run python scripts/mock.py --seat 4 --seed 7 --projections data/projections_2
   and not committed.
 
 
+## Usage metrics
+
+Each tool call logs one JSON line (logger `statline.usage`, stdout) that Cloud Run ingests as
+a structured entry: tool name, `public` or `league` server, success, duration in ms, and a
+12-character keyed hash of the caller (IP address on the public server, Yahoo account id on
+the league server). Arguments, results, IPs and account ids are never logged. The HMAC key is
+derived from `STORAGE_ENCRYPTION_KEY`; without it (public-only) hashes change on restart.
+Only league hashes count real users: claude.ai sends public requests from shared
+infrastructure, so many users share one public hash. Cloud Logging keeps the lines 30 days.
+Summarize them (needs `gcloud` auth):
+
+```sh
+uv run python scripts/usage.py --days 30 --project statline-mcp
+```
+
 ## Deployment
 
 Google Cloud Run, built from the `Dockerfile` by Cloud Build (no local Docker needed). The

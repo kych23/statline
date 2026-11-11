@@ -17,6 +17,7 @@ from statline.server.auth_config import AuthConfig
 from statline.server.data import ServerData
 from statline.server.league import ATTRIBUTION, register_league
 from statline.server.limits import HeavyToolGate
+from statline.server.usage import UsageMiddleware, usage_key
 from statline.yahoo.client import TTLCache
 
 YAHOO_CACHE_TTL_S = 900
@@ -85,10 +86,14 @@ color:#1a1a1a}
 </head>
 <body>
 <h1>Privacy policy</h1>
-<p>The public Statline tools (/mcp) need no sign-in and store nothing about you. The rest
-applies only if you connect your Yahoo account to the league endpoint.</p>
+<p>The public Statline tools (/mcp) need no sign-in. Apart from the usage logs below, the
+rest applies only if you connect your Yahoo account to the league endpoint.</p>
 <h2>What is stored</h2>
 <ul>
+<li>Usage logs: each tool call logs the tool name, whether it succeeded, how long it took
+and a keyed one-way hash of your IP address (public tools) or Yahoo account id (league
+tools). Never your IP address, account id, questions or results. Google Cloud keeps these
+logs for 30 days.</li>
 <li>Your Yahoo OAuth tokens, encrypted, in Google Firestore. They let Statline read your
 fantasy leagues on your behalf.</li>
 <li>A 15-minute in-memory cache of Yahoo responses, keyed by a hashed user id. It is never
@@ -122,12 +127,21 @@ def build_http_app(
     # read-only server on an unknown hostname, so they are explicitly off.
     http_options: dict[str, Any] = {"stateless_http": True, "host_origin_protection": False}
     gate = HeavyToolGate(per_caller_per_hour=MOCK_PER_HOUR)
-    app = build_server(data, gate).http_app(path="/mcp", **http_options)
+    # One key for both servers: the same caller hashes alike across them.
+    key = usage_key(auth_cfg.storage_encryption_key if auth_cfg is not None else None)
+    public = build_server(data, gate, usage=UsageMiddleware("public", key))
+    app = public.http_app(path="/mcp", **http_options)
 
     proxy = auth if auth is not None else build_auth(auth_cfg) if auth_cfg is not None else None
     league_app = None
     if proxy is not None:
-        league_server = build_server(data, gate, name="statline-league", auth=proxy)
+        league_server = build_server(
+            data,
+            gate,
+            name="statline-league",
+            auth=proxy,
+            usage=UsageMiddleware("league", key),
+        )
         register_league(
             league_server, data, TTLCache(YAHOO_CACHE_TTL_S), proxy=proxy, transport=yahoo_transport
         )
