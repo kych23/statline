@@ -120,7 +120,8 @@ uv run python scripts/mock.py --seat 4 --seed 7 --projections data/projections_2
 - **Your picks** maximize the gain to your starting lineup, measured as value over
   replacement (VOR): projected points minus the best player left unstarted league-wide at
   that slot. FLEX gets its own replacement level, since a TE there competes with RBs and
-  WRs. A small credit for bench depth breaks late-round ties.
+  WRs. A small credit for bench depth, weighted by position (RB/WR bench players cover more
+  starting slots than QB/TE), breaks late-round ties.
 - **Opponents** pick from ADP (average draft position, Fantasy Football Calculator) with
   noise: P(player) ∝ exp(−ADP / τ), where τ = 1 + 0.07 × pick number. The randomness grows
   through the draft, as it does in real drafts. τ was fitted so simulated pick spreads

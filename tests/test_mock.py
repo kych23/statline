@@ -8,7 +8,7 @@ import pytest
 
 from statline.draft.board import build_board
 from statline.draft.league import League, load_league
-from statline.draft.mock import _my_pick, lineup_value, mock_draft
+from statline.draft.mock import DEPTH_WEIGHTS, _my_pick, lineup_value, mock_draft
 
 REPO = Path(__file__).resolve().parents[1]
 Synthetic = Callable[..., tuple[pd.DataFrame, pd.DataFrame]]
@@ -104,6 +104,32 @@ def test_seat_prefers_starting_wr_over_second_qb() -> None:
     args = (rows, board, False)
     assert _my_pick(*args, roster=[0], league=LEAGUE, levels=levels) == 2
     assert _my_pick(*args, roster=[], league=LEAGUE, levels=levels) == 1
+
+
+def test_depth_weights_are_probabilities_and_favor_flex_positions() -> None:
+    assert all(0 < w < 1 for w in DEPTH_WEIGHTS.values())
+    for flex_pos in ("RB", "WR"):
+        for single_pos in ("QB", "TE"):
+            assert DEPTH_WEIGHTS[flex_pos] > DEPTH_WEIGHTS[single_pos]
+    expected = {"QB": 0.27, "RB": 0.62, "WR": 0.57, "TE": 0.25}
+    for pos, value in expected.items():
+        assert DEPTH_WEIGHTS[pos] == pytest.approx(value, abs=0.01)
+
+
+def test_seat_values_bench_rb_over_bench_te_of_equal_vor() -> None:
+    # starters are filled and both candidates sit below replacement, so only depth credit differs
+    board = pd.DataFrame(
+        {
+            "position": ["QB", "RB", "RB", "WR", "WR", "TE", "RB", "TE"],
+            "adp": [1.0, 2, 3, 4, 5, 6, 7, 8],
+            "p50": [25.0, 20, 20, 20, 20, 15, 5, 5],
+            "vor": [10.0, 10, 10, 10, 10, 6, 4, 4],
+        }
+    )
+    levels = {"QB": 15.0, "RB": 10.0, "WR": 10.0, "TE": 8.0, "FLEX": 10.0}
+    roster = [0, 1, 2, 3, 4, 5]
+    # the bench TE has the better ADP, so only the depth weights can make the RB win
+    assert _my_pick(np.array([7, 6]), board, False, roster, LEAGUE, levels) == 6
 
 
 def test_mock_draft_requires_replacement_levels() -> None:

@@ -12,8 +12,22 @@ from statline.draft.league import League
 TAU0 = 1.0
 TAU_SLOPE = 0.07
 NO_STARTER_POSITIONS = ("K", "DST")
-# Bench players cover injuries and byes, so they are worth a fraction of their value.
-DEPTH_WEIGHT = 0.25
+# Share of games missed per season by veterans (nflverse weekly data, 2018-2025).
+MISS_RATE = {"QB": 0.222, "RB": 0.233, "WR": 0.200, "TE": 0.204}
+# How many starting slots a bench player at this position can cover
+# (RB/WR: two starters plus FLEX; QB/TE: one).
+COVER_SLOTS = {"QB": 1, "RB": 3, "WR": 3, "TE": 1}
+BYE_AVAILABILITY = 16 / 17
+
+
+def _depth_weight(miss_rate: float, cover_slots: int) -> float:
+    """Chance in a given week that at least one starter this bench player could cover is out."""
+    available = (1 - miss_rate) * BYE_AVAILABILITY
+    return 1 - available**cover_slots
+
+
+# A bench player's value is the chance he has to fill in; K/DST (vor 0) get no weight.
+DEPTH_WEIGHTS = {pos: _depth_weight(MISS_RATE[pos], COVER_SLOTS[pos]) for pos in MISS_RATE}
 
 
 @dataclass(frozen=True)
@@ -97,7 +111,7 @@ def _my_pick(
     league: League,
     levels: dict[str, float],
 ) -> int:
-    """Highest marginal lineup value (plus a little depth credit) among the candidate rows."""
+    """Highest marginal lineup value (plus position-weighted depth credit) among the rows."""
     all_positions = board["position"].to_numpy()
     if not restricted:
         # K/DST carry vor 0 by construction; they are not taken early unless forced
@@ -122,7 +136,7 @@ def _my_pick(
         if np.isnan(vor):  # unprojected: only when nothing projected is left (handled above)
             scores.append(-np.inf)
             continue
-        scores.append(gain + DEPTH_WEIGHT * max(vor, 0.0))
+        scores.append(gain + DEPTH_WEIGHTS.get(str(all_positions[r]), 0.0) * max(vor, 0.0))
     return int(rows[int(np.argmax(scores))])
 
 
