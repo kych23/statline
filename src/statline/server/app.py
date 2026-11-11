@@ -8,7 +8,8 @@ from statline.server.limits import HeavyToolGate
 from statline.server.tools import register
 from statline.server.usage import UsageMiddleware
 
-MOCK_PER_HOUR = 10
+MOCK_PER_HOUR = 10  # per signed-in Yahoo account
+MOCK_PUBLIC_PER_HOUR = 60  # shared by all public callers (~0.4 s CPU each)
 INSTRUCTIONS = (
     "Statline serves fantasy football projections as rest-of-season average PPR points per "
     "game, with a 10th-90th percentile range for that average (not single-week scores). "
@@ -16,6 +17,10 @@ INSTRUCTIONS = (
     "value over replacement. mock_draft simulates a full snake draft from a seat and returns "
     "the roster."
 )
+
+
+def mock_gate() -> HeavyToolGate:
+    return HeavyToolGate(MOCK_PER_HOUR, public_per_hour=MOCK_PUBLIC_PER_HOUR)
 
 
 def build_server(
@@ -29,5 +34,5 @@ def build_server(
     server = FastMCP(name, instructions=INSTRUCTIONS, auth=auth)
     if usage is not None:
         server.add_middleware(usage)
-    register(server, data, gate or HeavyToolGate(per_caller_per_hour=MOCK_PER_HOUR))
+    register(server, data, gate or mock_gate())
     return server

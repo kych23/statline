@@ -11,12 +11,11 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Mount
 
-from statline.server.app import MOCK_PER_HOUR, build_server
+from statline.server.app import build_server, mock_gate
 from statline.server.auth import build_auth
 from statline.server.auth_config import AuthConfig
 from statline.server.data import ServerData
 from statline.server.league import ATTRIBUTION, register_league
-from statline.server.limits import HeavyToolGate
 from statline.server.usage import UsageMiddleware, usage_key
 from statline.yahoo.client import TTLCache
 
@@ -126,7 +125,7 @@ def build_http_app(
     # Host/Origin checks defend localhost servers against DNS rebinding; this is a public
     # read-only server on an unknown hostname, so they are explicitly off.
     http_options: dict[str, Any] = {"stateless_http": True, "host_origin_protection": False}
-    gate = HeavyToolGate(per_caller_per_hour=MOCK_PER_HOUR)
+    gate = mock_gate()  # one gate: a single simulation at a time across both servers
     # One key for both servers: the same caller hashes alike across them.
     key = usage_key(auth_cfg.storage_encryption_key if auth_cfg is not None else None)
     public = build_server(data, gate, usage=UsageMiddleware("public", key))

@@ -153,7 +153,7 @@ uv run python scripts/usage.py --days 30 --project statline-mcp
 Google Cloud Run, built from the `Dockerfile` by Cloud Build (no local Docker needed). The
 image installs only runtime dependencies (`uv sync --no-default-groups`); the training stack
 lives in the `train` dependency group. Cost stays at $0 on the free tier: `--min-instances 0`
-(scales to zero), `--max-instances 1`, a per-IP hourly limit on `mock_draft`, an image cleanup
+(scales to zero), `--max-instances 1`, an hourly `mock_draft` limit (60 shared by public callers, since claude.ai relays them from shared IPs; 10 per signed-in Yahoo account), an image cleanup
 policy that keeps only the newest image, and a $1 budget alert.
 
 Secrets (Yahoo client ID/secret, JWT signing key, storage encryption key) live in Secret

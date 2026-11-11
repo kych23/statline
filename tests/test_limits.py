@@ -1,6 +1,13 @@
 import pytest
 
-from statline.server.limits import Busy, HeavyToolGate, OverQuota, caller_id
+from statline.server.limits import (
+    PUBLIC_CALLER,
+    Busy,
+    HeavyToolGate,
+    OverQuota,
+    caller_id,
+    quota_caller,
+)
 
 
 class FakeClock:
@@ -65,3 +72,22 @@ async def test_history_is_pruned_after_window() -> None:
 )
 def test_caller_id(header: str | None, expected: str) -> None:
     assert caller_id(header) == expected
+
+
+@pytest.mark.anyio
+async def test_public_bucket_has_its_own_limit() -> None:
+    gate = HeavyToolGate(1, FakeClock(), public_per_hour=3)
+    for _ in range(3):
+        await use(gate, PUBLIC_CALLER)
+    with pytest.raises(OverQuota):
+        await use(gate, PUBLIC_CALLER)
+    await use(gate, quota_caller("guid-a"))
+    with pytest.raises(OverQuota):
+        await use(gate, quota_caller("guid-a"))
+    await use(gate, quota_caller("guid-b"))
+
+
+def test_quota_caller() -> None:
+    assert quota_caller("ABC") == "yahoo:ABC"
+    assert quota_caller(None) == PUBLIC_CALLER
+    assert quota_caller("") == PUBLIC_CALLER

@@ -7,6 +7,9 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 WINDOW_S = 3600.0
+# claude.ai relays every user's public requests from shared infrastructure, so the public
+# server cannot tell callers apart: they share one quota. League callers are Yahoo accounts.
+PUBLIC_CALLER = "public"
 
 
 class OverQuota(Exception):
@@ -21,9 +24,14 @@ class Busy(Exception):
 
 class HeavyToolGate:
     def __init__(
-        self, per_caller_per_hour: int, clock: Callable[[], float] = time.monotonic
+        self,
+        per_caller_per_hour: int,
+        clock: Callable[[], float] = time.monotonic,
+        *,
+        public_per_hour: int | None = None,
     ) -> None:
         self._limit = per_caller_per_hour
+        self._public_limit = per_caller_per_hour if public_per_hour is None else public_per_hour
         self._clock = clock
         self._calls: dict[str, deque[float]] = {}
         self._lock = asyncio.Lock()
@@ -41,13 +49,19 @@ class HeavyToolGate:
         now = self._clock()
         self._prune(now)
         history = self._calls.get(caller)
-        if history is not None and len(history) >= self._limit:
+        limit = self._public_limit if caller == PUBLIC_CALLER else self._limit
+        if history is not None and len(history) >= limit:
             raise OverQuota(max(1, int(history[0] + WINDOW_S - now + 0.999)))
         if self._lock.locked():
             raise Busy
         async with self._lock:
             self._calls.setdefault(caller, deque()).append(now)
             yield
+
+
+def quota_caller(subject: str | None) -> str:
+    """Quota key: the signed-in Yahoo account, else the shared public bucket."""
+    return f"yahoo:{subject}" if subject else PUBLIC_CALLER
 
 
 def caller_id(forwarded_for: str | None) -> str:

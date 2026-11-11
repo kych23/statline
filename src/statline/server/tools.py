@@ -6,12 +6,12 @@ from typing import Annotated, Any, Literal
 
 import anyio.to_thread
 from fastmcp import FastMCP
-from fastmcp.server.dependencies import get_http_headers
+from fastmcp.server.dependencies import get_access_token
 from pydantic import Field
 
 from statline.draft.mock import mock_draft as run_mock_draft
 from statline.server.data import ServerData
-from statline.server.limits import Busy, HeavyToolGate, OverQuota, caller_id
+from statline.server.limits import Busy, HeavyToolGate, OverQuota, quota_caller
 from statline.server.resolve import resolve
 
 Position = Literal["QB", "RB", "WR", "TE"]
@@ -217,6 +217,7 @@ def register(server: FastMCP, data: ServerData, gate: HeavyToolGate) -> None:
     ) -> dict[str, Any]:
         """Simulate a full snake mock draft and return the roster picked from your seat.
         Opponents pick by average draft position with noise; your picks follow projected
-        value. Limited per caller per hour."""
-        caller = caller_id(get_http_headers().get("x-forwarded-for"))
+        value. Limited per hour: per Yahoo account when signed in, shared otherwise."""
+        token = get_access_token()
+        caller = quota_caller(token.subject if token is not None else None)
         return await mock_draft(data, gate, caller, seat, seed)
