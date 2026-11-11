@@ -50,7 +50,9 @@ def run_projections(season: int, as_of_week: int) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build live projections, or print the backtest table.")
+    parser = argparse.ArgumentParser(
+        description="Build live projections, or print the backtest table."
+    )
     parser.add_argument("--backtest", action="store_true", help="print the backtest table")
     parser.add_argument("--season", type=int, help="season to project")
     parser.add_argument("--as-of-week", type=int, help="regular-season weeks completed")
