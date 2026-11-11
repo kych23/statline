@@ -1,6 +1,7 @@
 """Assemble the MCP server."""
 
 from fastmcp import FastMCP
+from fastmcp.server.auth import AuthProvider
 
 from statline.server.data import ServerData
 from statline.server.limits import HeavyToolGate
@@ -15,7 +16,13 @@ INSTRUCTIONS = (
 )
 
 
-def build_server(data: ServerData, gate: HeavyToolGate | None = None) -> FastMCP:
-    server = FastMCP("statline", instructions=INSTRUCTIONS)
+def build_server(
+    data: ServerData,
+    gate: HeavyToolGate | None = None,
+    *,
+    name: str = "statline",
+    auth: AuthProvider | None = None,
+) -> FastMCP:
+    server = FastMCP(name, instructions=INSTRUCTIONS, auth=auth)
     register(server, data, gate or HeavyToolGate(per_caller_per_hour=MOCK_PER_HOUR))
     return server

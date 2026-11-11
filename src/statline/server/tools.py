@@ -22,17 +22,17 @@ MAX_SEED = 2**31 - 1
 BUSY_RETRY_AFTER_S = 15
 
 
-def _error(message: str) -> dict[str, Any]:
+def bad_request(message: str) -> dict[str, Any]:
     return {"error": "bad_request", "message": message}
 
 
-def _as_of(data: ServerData) -> dict[str, Any]:
+def as_of(data: ServerData) -> dict[str, Any]:
     return {"season": data.season, "week": data.as_of_week, "data_date": data.data_date}
 
 
 def get_player(data: ServerData, names: list[str]) -> dict[str, Any]:
     if not 1 <= len(names) <= MAX_NAMES:
-        return _error(f"pass between 1 and {MAX_NAMES} names")
+        return bad_request(f"pass between 1 and {MAX_NAMES} names")
     table = data.projections
     position_rank = table.groupby("position")["p50"].rank(ascending=False, method="min")
 
@@ -70,7 +70,7 @@ def get_player(data: ServerData, names: list[str]) -> dict[str, Any]:
         "players": players,
         "ambiguous": ambiguous,
         "unresolved": unresolved,
-        "as_of": _as_of(data),
+        "as_of": as_of(data),
     }
     if len(players) >= 2:
         ordered = sorted(players, key=lambda p: p["projection"]["p50"], reverse=True)
@@ -93,7 +93,7 @@ def rankings(
     sort_by: SortBy = "vor",
 ) -> dict[str, Any]:
     if not 1 <= top_n <= MAX_TOP_N:
-        return _error(f"top_n must be between 1 and {MAX_TOP_N}")
+        return bad_request(f"top_n must be between 1 and {MAX_TOP_N}")
     table = data.projections
     if position is not None:
         table = table[table["position"] == position]
@@ -108,7 +108,7 @@ def rankings(
         }
         for rank, (_, row) in enumerate(top.iterrows(), start=1)
     ]
-    return {"rankings": rows, "position": position, "sort_by": sort_by, "as_of": _as_of(data)}
+    return {"rankings": rows, "position": position, "sort_by": sort_by, "as_of": as_of(data)}
 
 
 def _round1(value: Any) -> float | None:
@@ -123,11 +123,11 @@ async def mock_draft(
         return {"error": "unavailable", "message": "mock drafts are not configured on this server"}
     league = data.league
     if not 1 <= seat <= league.teams:
-        return _error(f"seat must be between 1 and {league.teams}")
+        return bad_request(f"seat must be between 1 and {league.teams}")
     if seed is None:
         seed = secrets.randbelow(2**31)
     elif not 0 <= seed <= MAX_SEED:
-        return _error(f"seed must be between 0 and {MAX_SEED}")
+        return bad_request(f"seed must be between 0 and {MAX_SEED}")
 
     try:
         async with gate.slot(caller):

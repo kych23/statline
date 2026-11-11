@@ -1,4 +1,4 @@
-"""Serve Statline over HTTP (landing page, /health, MCP at /mcp)."""
+"""Serve Statline over HTTP: landing page, /health, MCP at /mcp, Yahoo MCP at /league/mcp."""
 
 import logging
 import os
@@ -6,6 +6,7 @@ from pathlib import Path
 
 import uvicorn
 
+from statline.server.auth_config import load_auth_config
 from statline.server.data import ServerData
 from statline.server.http import build_http_app
 
@@ -30,7 +31,17 @@ def main() -> None:
         adp if have_board else None,
     )
     # No banner or update check: those only run via FastMCP.run(), which we bypass.
-    uvicorn.run(build_http_app(data), host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
+    auth_cfg = load_auth_config()
+    log.info("league auth %s", "enabled" if auth_cfg else "disabled")
+    uvicorn.run(
+        build_http_app(data, auth_cfg),
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8080")),
+        # Trust X-Forwarded-Proto so URLs built from the request say https; only Cloud Run's
+        # front end can reach the container, so trusting any forwarder is safe.
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )
 
 
 if __name__ == "__main__":
