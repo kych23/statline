@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from statline.draft.board import build_board
 from statline.draft.league import League, load_league
 from statline.draft.value import add_vor
 from statline.model.project import OUTPUT_COLUMNS
@@ -18,9 +19,16 @@ class ServerData:
     season: int
     as_of_week: int
     data_date: str  # ISO date the projections file was written
+    board: pd.DataFrame | None = None  # build_board output (carries attrs["replacement"])
 
     @classmethod
-    def load(cls, projections_path: Path, league_path: Path) -> "ServerData":
+    def load(
+        cls,
+        projections_path: Path,
+        league_path: Path,
+        draft_projections_path: Path | None = None,
+        adp_path: Path | None = None,
+    ) -> "ServerData":
         projections = pd.read_parquet(projections_path)
         missing = [c for c in OUTPUT_COLUMNS if c not in projections.columns]
         if missing:
@@ -33,6 +41,13 @@ class ServerData:
                 f"{projections_path} must hold exactly one (season, as_of_week), found {len(pairs)}"
             )
         league = load_league(league_path)
+        board = None
+        if draft_projections_path is not None and adp_path is not None:
+            draft = pd.read_parquet(draft_projections_path)
+            if (draft["as_of_week"] != 0).any():
+                raise ValueError(f"{draft_projections_path} must be preseason (as_of_week 0)")
+            # Read the cached file directly: the server must never hit the network.
+            board = build_board(draft, pd.read_parquet(adp_path), league)
         mtime = datetime.fromtimestamp(projections_path.stat().st_mtime, tz=UTC)
         return cls(
             projections=add_vor(projections.reset_index(drop=True), league),
@@ -40,4 +55,5 @@ class ServerData:
             season=int(pairs["season"].iloc[0]),
             as_of_week=int(pairs["as_of_week"].iloc[0]),
             data_date=mtime.date().isoformat(),
+            board=board,
         )

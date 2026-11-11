@@ -1,17 +1,25 @@
 """Projection tools: plain functions over ServerData, plus their MCP registration."""
 
+import math
+import secrets
 from typing import Annotated, Any, Literal
 
+import anyio.to_thread
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 from pydantic import Field
 
+from statline.draft.mock import mock_draft as run_mock_draft
 from statline.server.data import ServerData
+from statline.server.limits import Busy, HeavyToolGate, OverQuota, caller_id
 from statline.server.resolve import resolve
 
 Position = Literal["QB", "RB", "WR", "TE"]
 SortBy = Literal["vor", "p50"]
 MAX_NAMES = 8
 MAX_TOP_N = 50
+MAX_SEED = 2**31 - 1
+BUSY_RETRY_AFTER_S = 15
 
 
 def _error(message: str) -> dict[str, Any]:
@@ -103,8 +111,59 @@ def rankings(
     return {"rankings": rows, "position": position, "sort_by": sort_by, "as_of": _as_of(data)}
 
 
-def register(server: FastMCP, data: ServerData) -> None:
-    read_only = {"readOnlyHint": True}
+def _round1(value: Any) -> float | None:
+    return None if math.isnan(value) else round(float(value), 1)
+
+
+async def mock_draft(
+    data: ServerData, gate: HeavyToolGate, caller: str, seat: int, seed: int | None
+) -> dict[str, Any]:
+    board = data.board
+    if board is None:
+        return {"error": "unavailable", "message": "mock drafts are not configured on this server"}
+    league = data.league
+    if not 1 <= seat <= league.teams:
+        return _error(f"seat must be between 1 and {league.teams}")
+    if seed is None:
+        seed = secrets.randbelow(2**31)
+    elif not 0 <= seed <= MAX_SEED:
+        return _error(f"seed must be between 0 and {MAX_SEED}")
+
+    try:
+        async with gate.slot(caller):
+            result = await anyio.to_thread.run_sync(run_mock_draft, board, league, seat, seed)
+    except Busy:
+        return {"status": "busy", "retry_after_s": BUSY_RETRY_AFTER_S}
+    except OverQuota as exc:
+        return {"status": "rate_limited", "resets_in_s": exc.resets_in_s}
+
+    mine = result.picks[result.picks["team"] == seat]
+    roster = [
+        {
+            "round": int(pick["round"]),
+            "pick": int(pick["pick_no"]),
+            "name": pick["name"],
+            "position": pick["position"],
+            "p50": _round1(board["p50"].iloc[pick["player"]]),
+            "vor": _round1(pick["vor"]),
+        }
+        for _, pick in mine.iterrows()
+    ]
+    return {
+        "seat": seat,
+        "seed": seed,
+        "league": {"teams": league.teams, "rounds": league.rounds},
+        "roster": roster,
+        "note": ("Roster p50 and vor are preseason (week 0) PPR points per game."),
+        "method": (
+            "Opponents draft by average draft position with calibrated randomness; "
+            "your picks maximize starting-lineup value over replacement."
+        ),
+    }
+
+
+def register(server: FastMCP, data: ServerData, gate: HeavyToolGate) -> None:
+    read_only = {"read_only_hint": True}
 
     @server.tool(name="get_player", title="Get player projections", annotations=read_only)
     def get_player_tool(
@@ -132,3 +191,17 @@ def register(server: FastMCP, data: ServerData) -> None:
         """Top players by projected rest-of-season PPR points per game, with a 10th-90th
         percentile range, ranked by value over replacement or median projection."""
         return rankings(data, position, top_n, sort_by)
+
+    @server.tool(name="mock_draft", title="Mock draft", annotations=read_only)
+    async def mock_draft_tool(
+        seat: Annotated[int, Field(description="Your draft position, 1 to the number of teams")],
+        seed: Annotated[
+            int | None,
+            Field(description="Replay a previous draft by its seed; omit for a new draft"),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Simulate a full snake mock draft and return the roster picked from your seat.
+        Opponents pick by average draft position with noise; your picks follow projected
+        value. Limited per caller per hour."""
+        caller = caller_id(get_http_headers().get("x-forwarded-for"))
+        return await mock_draft(data, gate, caller, seat, seed)

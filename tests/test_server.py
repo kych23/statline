@@ -1,16 +1,19 @@
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from fastmcp import Client
 
+from statline.draft.board import build_board
 from statline.draft.league import load_league
 from statline.draft.value import add_vor
 from statline.server.app import build_server
 from statline.server.data import ServerData
+from statline.server.limits import HeavyToolGate
 from statline.server.resolve import resolve
-from statline.server.tools import get_player, rankings
+from statline.server.tools import get_player, mock_draft, rankings
 
 ROWS = [
     ("Josh Allen", "QB", 20.0),
@@ -158,8 +161,97 @@ def test_load_adds_vor_and_rejects_mixed_weeks(tmp_path: Path) -> None:
 async def test_mcp_end_to_end(data: ServerData) -> None:
     async with Client(build_server(data)) as client:
         tools = await client.list_tools()
-        assert {t.name for t in tools} == {"get_player", "rankings"}
+        assert {t.name for t in tools} == {"get_player", "rankings", "mock_draft"}
         assert all(t.annotations and t.annotations.read_only_hint for t in tools)
         result = await client.call_tool("get_player", {"names": ["Jahmyr Gibs"]})
     assert result.data["players"][0]["name"] == "Jahmyr Gibbs"
     json.dumps(result.data)
+
+
+@pytest.fixture
+def draft_data(
+    data: ServerData, synthetic: Callable[..., tuple[pd.DataFrame, pd.DataFrame]]
+) -> ServerData:
+    proj, adp = synthetic()
+    board = build_board(proj, adp, data.league)
+    return ServerData(data.projections, data.league, 2026, 9, "2026-11-01", board=board)
+
+
+def new_gate(limit: int = 10) -> HeavyToolGate:
+    return HeavyToolGate(per_caller_per_hour=limit)
+
+
+@pytest.mark.anyio
+async def test_mock_draft_unavailable_without_board(data: ServerData) -> None:
+    out = await mock_draft(data, new_gate(), "a", 1, 1)
+    assert out["error"] == "unavailable"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("seat", "seed"), [(0, 1), (13, 1), (1, -1), (1, 2**31)])
+async def test_mock_draft_rejects_bad_seat_or_seed(
+    draft_data: ServerData, seat: int, seed: int
+) -> None:
+    assert (await mock_draft(draft_data, new_gate(), "a", seat, seed))["error"] == "bad_request"
+
+
+@pytest.mark.anyio
+async def test_mock_draft_is_replayable_and_adp_free(draft_data: ServerData) -> None:
+    first = await mock_draft(draft_data, new_gate(), "a", 4, 7)
+    again = await mock_draft(draft_data, new_gate(), "a", 4, 7)
+    assert first["roster"] == again["roster"]
+    assert len(first["roster"]) == first["league"]["rounds"] == draft_data.league.rounds
+    assert first["seat"] == 4
+    assert "adp" not in {k.lower() for k in keys_of(first)}
+    json.dumps(first)
+
+
+@pytest.mark.anyio
+async def test_mock_draft_generates_seed_when_omitted(draft_data: ServerData) -> None:
+    out = await mock_draft(draft_data, new_gate(), "a", 1, None)
+    assert 0 <= out["seed"] < 2**31
+
+
+@pytest.mark.anyio
+async def test_mock_draft_rate_limited_after_quota(draft_data: ServerData) -> None:
+    gate = new_gate(1)
+    await mock_draft(draft_data, gate, "a", 1, 1)
+    out = await mock_draft(draft_data, gate, "a", 1, 1)
+    assert out["status"] == "rate_limited"
+    assert out["resets_in_s"] > 0
+
+
+@pytest.mark.anyio
+async def test_mock_draft_busy_while_another_runs(draft_data: ServerData) -> None:
+    gate = new_gate()
+    async with gate.slot("other"):
+        out = await mock_draft(draft_data, gate, "a", 1, 1)
+    assert out == {"status": "busy", "retry_after_s": 15}
+
+
+@pytest.mark.anyio
+async def test_mock_draft_over_mcp(draft_data: ServerData) -> None:
+    async with Client(build_server(draft_data)) as client:
+        result = await client.call_tool("mock_draft", {"seat": 3, "seed": 5})
+    assert len(result.data["roster"]) == draft_data.league.rounds
+
+
+def test_load_builds_board_from_preseason_files(
+    tmp_path: Path, synthetic: Callable[..., tuple[pd.DataFrame, pd.DataFrame]]
+) -> None:
+    proj, adp = synthetic()
+    proj = proj.assign(season=2026)
+    proj_path, adp_path = tmp_path / "w0.parquet", tmp_path / "adp.parquet"
+    proj.to_parquet(proj_path, index=False)
+    adp.to_parquet(adp_path, index=False)
+    current = tmp_path / "projections.parquet"
+    make_projections().to_parquet(current, index=False)
+
+    loaded = ServerData.load(current, LEAGUE_PATH, proj_path, adp_path)
+    assert loaded.board is not None
+    assert "replacement" in loaded.board.attrs
+    assert ServerData.load(current, LEAGUE_PATH).board is None
+
+    proj.assign(as_of_week=3).to_parquet(proj_path, index=False)
+    with pytest.raises(ValueError, match="as_of_week 0"):
+        ServerData.load(current, LEAGUE_PATH, proj_path, adp_path)
