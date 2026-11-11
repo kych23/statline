@@ -8,7 +8,25 @@ about players, mock drafts, or your Yahoo league. Projections are quantile forec
 (10th/50th/90th percentile points per game) from a gradient-boosted model trained on
 nflverse data.
 
-**Status:** milestone 3 of 5 (draft logic). Next: MCP server with a public demo endpoint.
+**Status:** milestone 4 of 5 (public MCP server). Next: Yahoo sign-in for your own league.
+
+## Try it
+
+Add Statline to Claude: **Settings → Connectors → Add custom connector**, name it Statline,
+URL:
+
+```
+https://statline-471351099718.us-central1.run.app/mcp
+```
+
+No sign-in needed. Then ask things like *"top 5 TEs rest of season"*, *"compare Gibbs and
+Bijan"* or *"mock draft from seat 4"*.
+
+| Tool | What it returns |
+|:--|:--|
+| `get_player` | Projections (10th/50th/90th percentile), VOR and position rank for 1-8 players, with a comparison |
+| `rankings` | Top players overall or by position, by VOR or median projection |
+| `mock_draft` | A full 12-team snake draft from your seat, replayable by seed |
 
 ## Projections
 
@@ -91,3 +109,23 @@ uv run python scripts/mock.py --seat 4 --seed 7 --projections data/projections_2
   end), and the same seed replays the same draft.
 - ADP is used only to drive opponents and is never displayed. The cached board is local
   and not committed.
+
+
+## Deployment
+
+Google Cloud Run, built from the `Dockerfile` by Cloud Build (no local Docker needed). The
+image installs only runtime dependencies (`uv sync --no-default-groups`); the training stack
+lives in the `train` dependency group. Cost stays at $0 on the free tier: `--min-instances 0`
+(scales to zero), `--max-instances 1`, a per-IP hourly limit on `mock_draft`, an image cleanup
+policy that keeps only the newest image, and a $1 budget alert.
+
+**Weekly refresh** (projections are baked into the image):
+
+```sh
+uv run python scripts/build.py --season 2026 --as-of-week <weeks completed>
+gcloud run deploy statline --source . --region us-central1 --allow-unauthenticated \
+  --min-instances 0 --max-instances 1 --memory 1Gi --cpu 1 --concurrency 10 --timeout 300
+```
+
+`.gcloudignore` is an allowlist: it uploads the gitignored `data/` files the image needs and
+nothing else.
