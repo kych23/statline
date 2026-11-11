@@ -8,7 +8,7 @@ about players, mock drafts, or your Yahoo league. Projections are quantile forec
 (10th/50th/90th percentile points per game) from a gradient-boosted model trained on
 nflverse data.
 
-**Status:** milestone 4 of 5 (public MCP server). Next: Yahoo sign-in for your own league.
+**Status:** all 5 milestones live: projections, draft logic, public MCP server, Yahoo league.
 
 ## Try it
 
@@ -27,6 +27,27 @@ Bijan"* or *"mock draft from seat 4"*.
 | `get_player` | Projections (10th/50th/90th percentile), VOR and position rank for 1-8 players, with a comparison |
 | `rankings` | Top players overall or by position, by VOR or median projection |
 | `mock_draft` | A full 12-team snake draft from your seat, replayable by seed |
+
+### Your Yahoo league
+
+Add a second connector with **Sign in now**:
+
+```
+https://statline-471351099718.us-central1.run.app/league/mcp
+```
+
+It signs you in with Yahoo (read-only) and adds league tools on top of the three above:
+
+| Tool | What it returns |
+|:--|:--|
+| `my_league` | Your leagues, scoring (flags non-PPR), standings, and your roster with projections |
+| `free_agents` | The best available players in your league, ranked by VOR, with injury status |
+| `delete_my_data` | Deletes your stored tokens and cached Yahoo data |
+
+Statline is an OAuth proxy between Claude and Yahoo: Claude receives Statline's own token and
+Yahoo tokens never leave the server. They are stored encrypted (Fernet) in Firestore, so
+sign-ins survive restarts. Details in [/privacy](https://statline-471351099718.us-central1.run.app/privacy).
+Fantasy data provided by Yahoo Fantasy.
 
 ## Projections
 
@@ -119,12 +140,18 @@ lives in the `train` dependency group. Cost stays at $0 on the free tier: `--min
 (scales to zero), `--max-instances 1`, a per-IP hourly limit on `mock_draft`, an image cleanup
 policy that keeps only the newest image, and a $1 budget alert.
 
+Secrets (Yahoo client ID/secret, JWT signing key, storage encryption key) live in Secret
+Manager and are passed with `--set-secrets`; the service account has only
+`secretmanager.secretAccessor` and `datastore.user`.
+
 **Weekly refresh** (projections are baked into the image):
 
 ```sh
 uv run python scripts/build.py --season 2026 --as-of-week <weeks completed>
 gcloud run deploy statline --source . --region us-central1 --allow-unauthenticated \
-  --min-instances 0 --max-instances 1 --memory 1Gi --cpu 1 --concurrency 10 --timeout 300
+  --min-instances 0 --max-instances 1 --memory 1Gi --cpu 1 --concurrency 10 --timeout 300 \
+  --set-secrets YAHOO_CLIENT_ID=YAHOO_CLIENT_ID:latest,YAHOO_CLIENT_SECRET=YAHOO_CLIENT_SECRET:latest,JWT_SIGNING_KEY=JWT_SIGNING_KEY:latest,STORAGE_ENCRYPTION_KEY=STORAGE_ENCRYPTION_KEY:latest \
+  --set-env-vars STATLINE_BASE_URL=https://statline-471351099718.us-central1.run.app,GOOGLE_CLOUD_PROJECT=statline-mcp
 ```
 
 `.gcloudignore` is an allowlist: it uploads the gitignored `data/` files the image needs and
