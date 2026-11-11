@@ -33,3 +33,16 @@ def test_vor_can_rank_a_lower_scoring_rb_above_a_qb() -> None:
     qb1 = out.loc[out["p50"] == 22.0, "vor"].item()  # 22 - 18 = 4
     rb1 = out.loc[out["p50"] == 16.0, "vor"].item()  # 16 - 6 = 10
     assert rb1 > qb1
+
+
+def test_flex_level_is_best_flex_eligible_player_left_on_the_bench() -> None:
+    # FLEX starts RB 12 and WR 9; RB 6 is the best flex-eligible player not starting
+    assert replacement_levels(PLAYERS, LEAGUE)["FLEX"] == 6.0
+    no_flex = League(
+        teams=2,
+        rounds=5,
+        slots={"QB": 1, "RB": 1, "WR": 1, "BENCH": 2},
+        flex_eligible=("RB", "WR"),
+        max_per_position={},
+    )
+    assert "FLEX" not in replacement_levels(PLAYERS, no_flex)

@@ -17,6 +17,9 @@ def replacement_levels(
     from the best remaining flex-eligible players. Replacement = best player not starting.
 
     `players` has `position` and `value` columns; positions with no rows are omitted.
+    A "FLEX" entry (when the league has a FLEX slot) is the best flex-eligible player left
+    on the bench, or the worst flex-eligible starter if none is: the baseline a player
+    must beat to earn his FLEX slot, whatever his own position. `add_vor` does not use it.
     """
     ranked = players.sort_values(value, ascending=False)
     starting: set = set()
@@ -34,6 +37,13 @@ def replacement_levels(
         levels[str(pos)] = float(
             on_bench.max() if len(on_bench) else ranked.loc[ranked["position"] == pos, value].min()
         )
+    if league.starters.get("FLEX"):
+        eligible = ranked["position"].isin(league.flex_eligible)
+        flex_bench = bench.loc[bench["position"].isin(league.flex_eligible), value]
+        if len(flex_bench):
+            levels["FLEX"] = float(flex_bench.max())
+        elif eligible.any():
+            levels["FLEX"] = float(ranked.loc[eligible, value].min())
     return levels
 
 

@@ -17,7 +17,7 @@ from statline.model.train import quantile_gbm
 
 FIRST_SEASON = 2015  # earliest data; features start a season later (they need a prior year)
 BACKTEST_SEASONS = range(2022, 2026)
-OUTPUT = Path("data/projections.parquet")
+DEFAULT_OUTPUT = Path("data/projections.parquet")
 
 
 def feature_table(last_season: int, refresh_last: bool) -> pd.DataFrame:
@@ -40,12 +40,12 @@ def run_backtest() -> None:
     print(report(relevant(preds)).to_markdown())
 
 
-def run_projections(season: int, as_of_week: int) -> None:
+def run_projections(season: int, as_of_week: int, output: Path) -> None:
     table = feature_table(season, refresh_last=True)
     projections = project(table, season, as_of_week)
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    projections.to_parquet(OUTPUT, index=False)
-    print(f"wrote {len(projections)} projections to {OUTPUT}\n")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    projections.to_parquet(output, index=False)
+    print(f"wrote {len(projections)} projections to {output}\n")
     print(projections.head(15).round(1).to_string(index=False))
 
 
@@ -56,11 +56,12 @@ def main() -> None:
     parser.add_argument("--backtest", action="store_true", help="print the backtest table")
     parser.add_argument("--season", type=int, help="season to project")
     parser.add_argument("--as-of-week", type=int, help="regular-season weeks completed")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="projections parquet")
     args = parser.parse_args()
     if args.backtest:
         run_backtest()
     elif args.season is not None and args.as_of_week is not None:
-        run_projections(args.season, args.as_of_week)
+        run_projections(args.season, args.as_of_week, args.output)
     else:
         parser.error("pass --backtest, or both --season and --as-of-week")
 
