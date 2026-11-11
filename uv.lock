@@ -1179,6 +1179,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
+    { name = "httpx2" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
@@ -1204,6 +1205,7 @@ train = [
 [package.metadata]
 requires-dist = [
     { name = "fastmcp", specifier = ">=4,<5" },
+    { name = "httpx2", specifier = ">=2.16.0" },
     { name = "pandas", specifier = ">=3.1.1" },
     { name = "pyarrow", specifier = ">=26.0.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
