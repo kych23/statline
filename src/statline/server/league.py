@@ -14,7 +14,7 @@ from pydantic import Field
 from statline.data.adp import name_key
 from statline.server import auth
 from statline.server.data import ServerData
-from statline.server.tools import Position, as_of, bad_request
+from statline.server.tools import PROJECTION_NOTE, Position, as_of, bad_request
 from statline.yahoo.client import (
     TTLCache,
     YahooAuthError,
@@ -147,6 +147,7 @@ async def _my_league(
         "my_team": team,
         "roster": roster,
         "as_of": as_of(data),
+        "projection_note": PROJECTION_NOTE,
         "attribution": ATTRIBUTION,
     }
 
@@ -202,6 +203,7 @@ async def _free_agents(
         "free_agents": [row for _, row in matched[:top_n]],
         "unprojected": len(available) - len(matched),
         "as_of": as_of(data),
+        "projection_note": PROJECTION_NOTE,
         "attribution": ATTRIBUTION,
     }
 
@@ -239,8 +241,8 @@ def register_league(
         ] = None,
     ) -> dict[str, Any]:
         """Your Yahoo fantasy league: scoring, standings and your roster. Each rostered player
-        carries a projection (p10/p50/p90 are rest-of-season PPR points per game) and vor
-        (value over replacement, same unit); players without a projection have null."""
+        carries a projection (p10/p50/p90: rest-of-season average PPR points per game, not
+        weekly scores) and vor (value over replacement, same unit); null if unprojected."""
         if (ctx := client_for()) is None:
             return login_required
         return await my_league(data, ctx[0], league_key)
@@ -260,7 +262,8 @@ def register_league(
         ] = 15,
     ) -> dict[str, Any]:
         """Best available free agents in your Yahoo league, ranked by value over replacement
-        (vor) computed from rest-of-season PPR points per game projections (p10/p50/p90). Draws
+        (vor) computed from rest-of-season average PPR points per game projections (p10/p50/p90, a
+        range for the average, not weekly scores). Draws
         from Yahoo's 50 most-owned available players; 'unprojected' counts the ones skipped
         for lacking a projection."""
         if (ctx := client_for()) is None:

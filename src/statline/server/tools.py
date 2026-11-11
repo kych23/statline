@@ -17,6 +17,12 @@ from statline.server.resolve import resolve
 Position = Literal["QB", "RB", "WR", "TE"]
 SortBy = Literal["vor", "p50"]
 MAX_NAMES = 8
+# Claude read p10/p90 as "bad week / great week"; they bound the season-long average.
+PROJECTION_NOTE = (
+    "p10/p50/p90 are the 10th/50th/90th percentiles of the player's AVERAGE PPR points per game "
+    "over the rest of the season (an 80% range for that average), not single-week scores, "
+    "which swing far more."
+)
 MAX_TOP_N = 50
 MAX_SEED = 2**31 - 1
 BUSY_RETRY_AFTER_S = 15
@@ -71,6 +77,7 @@ def get_player(data: ServerData, names: list[str]) -> dict[str, Any]:
         "ambiguous": ambiguous,
         "unresolved": unresolved,
         "as_of": as_of(data),
+        "projection_note": PROJECTION_NOTE,
     }
     if len(players) >= 2:
         ordered = sorted(players, key=lambda p: p["projection"]["p50"], reverse=True)
@@ -108,7 +115,13 @@ def rankings(
         }
         for rank, (_, row) in enumerate(top.iterrows(), start=1)
     ]
-    return {"rankings": rows, "position": position, "sort_by": sort_by, "as_of": as_of(data)}
+    return {
+        "rankings": rows,
+        "position": position,
+        "sort_by": sort_by,
+        "as_of": as_of(data),
+        "projection_note": PROJECTION_NOTE,
+    }
 
 
 def _round1(value: Any) -> float | None:
@@ -172,8 +185,9 @@ def register(server: FastMCP, data: ServerData, gate: HeavyToolGate) -> None:
             Field(description="1-8 player names; suffixes, last names and typos are tolerated"),
         ],
     ) -> dict[str, Any]:
-        """Projected rest-of-season PPR points per game (p10/p50/p90 = 10th/50th/90th
-        percentile range), value over replacement and position rank for named players.
+        """Projected rest-of-season average PPR points per game for named players: p50 is the
+        median, p10-p90 an 80% range for that season-long average (not single-week scores),
+        plus value over replacement and position rank.
         Two or more players also get a comparison against the best one."""
         return get_player(data, names)
 
@@ -188,8 +202,9 @@ def register(server: FastMCP, data: ServerData, gate: HeavyToolGate) -> None:
             Field(description="vor: value over replacement (cross-position); p50: median points"),
         ] = "vor",
     ) -> dict[str, Any]:
-        """Top players by projected rest-of-season PPR points per game, with a 10th-90th
-        percentile range, ranked by value over replacement or median projection."""
+        """Top players by projected rest-of-season average PPR points per game (p10-p90 is an
+        80% range for that average, not single-week scores), ranked by value over replacement
+        or median projection."""
         return rankings(data, position, top_n, sort_by)
 
     @server.tool(name="mock_draft", title="Mock draft", annotations=read_only)

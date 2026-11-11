@@ -9,10 +9,11 @@ from statline.server.tools import register
 
 MOCK_PER_HOUR = 10
 INSTRUCTIONS = (
-    "Statline serves fantasy football projections as rest-of-season PPR points per game "
-    "with a 10th-90th percentile range. Use get_player to look up and compare players and "
-    "rankings to list the top players by value over replacement. mock_draft simulates a "
-    "full snake draft from a seat and returns the roster."
+    "Statline serves fantasy football projections as rest-of-season average PPR points per "
+    "game, with a 10th-90th percentile range for that average (not single-week scores). "
+    "Use get_player to look up and compare players and rankings to list the top players by "
+    "value over replacement. mock_draft simulates a full snake draft from a seat and returns "
+    "the roster."
 )
 
 

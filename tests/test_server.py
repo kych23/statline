@@ -227,3 +227,10 @@ def test_load_builds_board_from_preseason_files(
     proj.assign(as_of_week=3).to_parquet(proj_path, index=False)
     with pytest.raises(ValueError, match="as_of_week 0"):
         ServerData.load(current, league_path, proj_path, adp_path)
+
+
+def test_projection_outputs_say_the_range_is_for_the_season_average(data: ServerData) -> None:
+    """Claude described p10/p90 as single-week floor/ceiling; every output now says otherwise."""
+    for out in (get_player(data, ["Gibbs"]), rankings(data, top_n=3)):
+        assert "AVERAGE" in out["projection_note"]
+        assert "not single-week" in out["projection_note"]
