@@ -1,0 +1,8 @@
+# Default league: 12-team full-PPR snake draft. Projections are PPR points per game.
+teams: 12
+rounds: 15
+roster:
+  slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1, BENCH: 6 }
+  flex_eligible: [RB, WR, TE]
+  # Most a roster may hold at a position (mock-draft picks respect these).
+  max_per_position: { QB: 2, TE: 2, K: 1, DST: 1 }

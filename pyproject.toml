@@ -10,6 +10,7 @@ dependencies = [
     "nflreadpy>=0.1.5",
     "pandas>=3.1.1",
     "pyarrow>=26.0.1",
+    "pyyaml>=6.0.3",
     "scikit-learn>=1.9.1",
 ]
 
@@ -20,6 +21,7 @@ dev = [
     "pyright",
     "pandas-stubs>=3.1.0.261029",
     "tabulate>=0.10.0",
+    "types-pyyaml>=6.0.12.20261103",
 ]
 
 [build-system]
