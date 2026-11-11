@@ -23,3 +23,4 @@ Enforced by `tests/test_dependencies.py`.
 - Comments only for non-obvious why. No speculative abstractions.
 - Point-in-time: every feature uses only data available before the prediction moment.
   Backtests walk forward.
+- When dealing with training the model, tweaking parameters, or making decisions to improve any tough task, use Fable 5.2 (if available) or Opus 5.5. Then handoff implementation tasks to Sonnet 5.5

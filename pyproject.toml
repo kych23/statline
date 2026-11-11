@@ -19,6 +19,7 @@ dev = [
     "ruff",
     "pyright",
     "pandas-stubs>=3.1.0.261029",
+    "tabulate>=0.10.0",
 ]
 
 [build-system]
@@ -36,7 +37,7 @@ known-first-party = ["statline"]
 
 [tool.pyright]
 typeCheckingMode = "basic"
-include = ["src", "tests"]
+include = ["src", "tests", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

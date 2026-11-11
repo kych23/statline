@@ -15,6 +15,8 @@ Method = Callable[[pd.DataFrame], Predictor]
 MIN_ROS_GAMES = 2
 BUCKETS = {"t 0-4": (0, 4), "t 5-9": (5, 9), "t 10-14": (10, 14)}
 BLEND_K_GRID = np.arange(0.5, 16.5, 0.5)
+CONTEXT_COLUMNS = ["season", "as_of_week", "ros_ppg", "prev_ppg", "std_ppg", "games_so_far"]
+RELEVANT_PPG = 10.0
 
 
 # ---------------------------------------------------------------- split + metrics
@@ -82,8 +84,16 @@ def backtest(
     for _, train, test in walk_forward(table, test_seasons):
         for name, fit in methods.items():
             pred = fit(train)(test).set_index(test.index)
-            frames.append(test[["season", "as_of_week", "ros_ppg"]].join(pred).assign(method=name))
+            frames.append(test[CONTEXT_COLUMNS].join(pred).assign(method=name))
     return pd.concat(frames, ignore_index=True)
+
+
+def relevant(predictions: pd.DataFrame) -> pd.DataFrame:
+    """Rows already fantasy-relevant before the prediction (never filtered on the outcome)."""
+    known_good = (predictions["prev_ppg"] >= RELEVANT_PPG) | (
+        (predictions["games_so_far"] >= 3) & (predictions["std_ppg"] >= RELEVANT_PPG)
+    )
+    return predictions[known_good]
 
 
 def report(predictions: pd.DataFrame) -> pd.DataFrame:
