@@ -9,12 +9,16 @@ uv run python scripts/build.py --backtest
 
 import argparse
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
 
 from statline.data.nflverse import (
     completed_weeks,
+    load_injuries,
+    load_roster_status,
     load_rosters,
     load_schedule,
     load_snaps,
@@ -24,12 +28,15 @@ from statline.features.build import attach_snap_share, build_features
 from statline.model.evaluate import BASELINES, backtest, relevant, report
 from statline.model.project import project
 from statline.model.schema import projection_problems
+from statline.model.status import attach_status
 from statline.model.train import quantile_gbm
 from statline.server.data import ServerData
 
 FIRST_SEASON = 2015  # earliest data; features start a season later (they need a prior year)
 BACKTEST_SEASONS = range(2022, 2026)
 DEFAULT_OUTPUT = Path("data/projections.parquet")
+STATUS_ATTEMPTS = 3
+STATUS_RETRY_S = 5
 DEFAULT_LEAGUE = Path("config/league.yaml")  # the server's default, see scripts/serve.py
 
 
@@ -53,9 +60,32 @@ def run_backtest() -> None:
     print(report(relevant(preds)).to_markdown())
 
 
+def status_tables(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Display-only inputs: a failed download yields null availability, not a failed build."""
+    frames = []
+    for name, load in (("roster status", load_roster_status), ("injuries", load_injuries)):
+        frames.append(_with_retries(name, lambda load=load: load(season)))
+    return frames[0], frames[1]
+
+
+def _with_retries(name: str, load: Callable[[], pd.DataFrame]) -> pd.DataFrame:
+    """Downloads fail transiently; retry before degrading to an empty frame."""
+    for attempt in range(1, STATUS_ATTEMPTS + 1):
+        try:
+            return load()
+        except Exception as error:  # noqa: BLE001 - nflreadpy raises assorted network errors
+            print(f"warning: {name} download failed (attempt {attempt}): {error}")
+            if attempt < STATUS_ATTEMPTS:
+                time.sleep(STATUS_RETRY_S * attempt)
+    print(f"warning: no {name}; its fields will be null")
+    return pd.DataFrame(columns=["player_id", "week"])
+
+
 def run_projections(season: int, as_of_week: int, output: Path) -> None:
     table = feature_table(season, refresh_last=True)
     projections = project(table, season, as_of_week)
+    roster_status, injuries = status_tables(season)
+    projections = attach_status(projections, roster_status, injuries)
     output.parent.mkdir(parents=True, exist_ok=True)
     projections.to_parquet(output, index=False)
     print(f"wrote {len(projections)} projections to {output}\n")

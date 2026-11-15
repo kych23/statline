@@ -234,3 +234,34 @@ def test_projection_outputs_say_the_range_is_for_the_season_average(data: Server
     for out in (get_player(data, ["Gibbs"]), rankings(data, top_n=3)):
         assert "AVERAGE" in out["projection_note"]
         assert "not single-week" in out["projection_note"]
+
+
+def test_tools_include_availability_and_injury(data: ServerData) -> None:
+    status = {
+        "availability": ["injured reserve"] + [None] * 11,
+        "injury": [None, "Questionable (hamstring), week 10"] + [None] * 10,
+        "status_as_of": 10,
+    }
+    with_status = ServerData(
+        data.projections.assign(**status), data.league, 2026, 9, "2026-11-01", status_as_of=10
+    )
+    out = get_player(with_status, ["Josh Allen", "Lamar Jackson"])
+    assert out["status_as_of_week"] == 10
+    allen, jackson = out["players"]
+    assert (allen["availability"], allen["injury"]) == ("injured reserve", None)
+    assert jackson["injury"] == "Questionable (hamstring), week 10"
+    by_name = {r["name"]: r for r in rankings(with_status, sort_by="p50")["rankings"]}
+    assert by_name["Josh Allen"]["availability"] == "injured reserve"
+    assert by_name["Lamar Jackson"]["injury"] == "Questionable (hamstring), week 10"
+
+
+def test_projections_without_status_columns_load_and_return_nulls(
+    tmp_path: Path, league_path: Path, make_projections: Callable[[], pd.DataFrame]
+) -> None:
+    path = tmp_path / "projections.parquet"
+    make_projections().to_parquet(path, index=False)  # an older file: no status columns
+    old = ServerData.load(path, league_path)
+    assert old.status_as_of is None
+    player = get_player(old, ["Josh Allen"])["players"][0]
+    assert (player["availability"], player["injury"]) == (None, None)
+    assert rankings(old)["rankings"][0]["availability"] is None

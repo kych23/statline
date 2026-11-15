@@ -32,6 +32,14 @@ def bad_request(message: str) -> dict[str, Any]:
     return {"error": "bad_request", "message": message}
 
 
+def status_fields(row: Any) -> dict[str, str | None]:
+    """availability/injury for a projections row; null when unknown or the file predates them."""
+    return {
+        key: value if isinstance(value := row.get(key), str) else None
+        for key in ("availability", "injury")
+    }
+
+
 def as_of(data: ServerData) -> dict[str, Any]:
     return {"season": data.season, "week": data.as_of_week, "data_date": data.data_date}
 
@@ -54,6 +62,7 @@ def get_player(data: ServerData, names: list[str]) -> dict[str, Any]:
                     "name": row["name"],
                     "position": row["position"],
                     "team": row["team"],
+                    **status_fields(row),
                     "projection": {k: round(float(row[k]), 1) for k in ("p10", "p50", "p90")},
                     "vor": round(float(row["vor"]), 1),
                     "position_rank": int(position_rank[res.player_index]),
@@ -77,6 +86,7 @@ def get_player(data: ServerData, names: list[str]) -> dict[str, Any]:
         "ambiguous": ambiguous,
         "unresolved": unresolved,
         "as_of": as_of(data),
+        "status_as_of_week": data.status_as_of,
         "projection_note": PROJECTION_NOTE,
     }
     if len(players) >= 2:
@@ -111,6 +121,7 @@ def rankings(
             "name": row["name"],
             "position": row["position"],
             "team": row["team"],
+            **status_fields(row),
             **{k: round(float(row[k]), 1) for k in ("p10", "p50", "p90", "vor")},
         }
         for rank, (_, row) in enumerate(top.iterrows(), start=1)
@@ -120,6 +131,7 @@ def rankings(
         "position": position,
         "sort_by": sort_by,
         "as_of": as_of(data),
+        "status_as_of_week": data.status_as_of,
         "projection_note": PROJECTION_NOTE,
     }
 
@@ -187,7 +199,9 @@ def register(server: FastMCP, data: ServerData, gate: HeavyToolGate) -> None:
     ) -> dict[str, Any]:
         """Projected rest-of-season average PPR points per game for named players: p50 is the
         median, p10-p90 an 80% range for that season-long average (not single-week scores),
-        plus value over replacement and position rank.
+        plus value over replacement and position rank, and availability (roster status) and
+        injury report. Availability/injury come from nflverse as of the projection build
+        (refreshed weekly, may lag game-day news; league tools carry Yahoo's live status).
         Two or more players also get a comparison against the best one."""
         return get_player(data, names)
 
@@ -204,7 +218,9 @@ def register(server: FastMCP, data: ServerData, gate: HeavyToolGate) -> None:
     ) -> dict[str, Any]:
         """Top players by projected rest-of-season average PPR points per game (p10-p90 is an
         80% range for that average, not single-week scores), ranked by value over replacement
-        or median projection."""
+        or median projection. Each player carries availability and injury (from nflverse as of
+        the build, refreshed weekly, may lag game-day news; league tools carry Yahoo's live
+        status)."""
         return rankings(data, position, top_n, sort_by)
 
     @server.tool(name="mock_draft", title="Mock draft", annotations=read_only)

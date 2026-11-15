@@ -24,8 +24,8 @@ Bijan"* or *"mock draft from seat 4"*.
 
 | Tool | What it returns |
 |:--|:--|
-| `get_player` | Projections (10th/50th/90th percentile), VOR and position rank for 1-8 players, with a comparison |
-| `rankings` | Top players overall or by position, by VOR or median projection |
+| `get_player` | Projections (10th/50th/90th percentile), VOR, position rank, availability and injury report for 1-8 players, with a comparison |
+| `rankings` | Top players overall or by position, by VOR or median projection, with availability and injury report |
 | `mock_draft` | A full 12-team snake draft from your seat, replayable by seed |
 
 ### Your Yahoo league

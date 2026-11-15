@@ -15,6 +15,10 @@ OUTPUT_COLUMNS = [
     "built_on",  # ISO date (UTC) the projections were built
 ]
 
+# Optional: added after the first release, so older files lack them and the server reads
+# them as null. Display only; they must never feed model features.
+STATUS_COLUMNS = ["availability", "injury", "status_as_of"]
+
 MIN_PLAYERS = 300  # a real build has ~600; fewer means a broken data pull
 
 

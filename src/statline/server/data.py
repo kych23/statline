@@ -19,6 +19,7 @@ class ServerData:
     as_of_week: int
     data_date: str  # ISO date the projections were built
     board: pd.DataFrame | None = None  # build_board output (carries attrs["replacement"])
+    status_as_of: int | None = None  # roster week behind availability/injury, if built with them
 
     @classmethod
     def load(
@@ -58,5 +59,14 @@ class ServerData:
             season=int(pairs["season"].iloc[0]),
             as_of_week=int(pairs["as_of_week"].iloc[0]),
             data_date=str(built[0]),
+            status_as_of=_status_week(projections),
             board=board,
         )
+
+
+def _status_week(projections: pd.DataFrame) -> int | None:
+    """Older files have no status_as_of; they, and all-null columns, read as unknown."""
+    if "status_as_of" not in projections.columns:
+        return None
+    weeks = projections["status_as_of"].dropna()
+    return int(weeks.iloc[0]) if len(weeks) else None

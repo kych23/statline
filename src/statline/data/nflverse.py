@@ -46,6 +46,20 @@ ROSTER_COLUMNS = {
     "rookie_year": "rookie_year",
 }
 
+ROSTER_STATUS_COLUMNS = {
+    "gsis_id": "player_id",
+    "team": "team",
+    "week": "week",
+    "status": "roster_status",
+}
+
+INJURY_COLUMNS = {
+    "gsis_id": "player_id",
+    "week": "week",
+    "report_status": "report_status",
+    "report_primary_injury": "injury",
+}
+
 
 def clean_weekly(raw: pd.DataFrame) -> pd.DataFrame:
     df = raw[(raw["season_type"] == "REG") & raw["position"].isin(POSITIONS)]
@@ -64,6 +78,20 @@ def clean_rosters(raw: pd.DataFrame) -> pd.DataFrame:
     return df.drop_duplicates(["player_id", "season"]).reset_index(drop=True)
 
 
+def clean_roster_status(raw: pd.DataFrame) -> pd.DataFrame:
+    """Regular-season weekly roster status per player; rows without an nflverse ID are dropped."""
+    df = raw[(raw["game_type"] == "REG") & raw["gsis_id"].notna() & (raw["gsis_id"] != "")]
+    return (
+        df[list(ROSTER_STATUS_COLUMNS)].rename(columns=ROSTER_STATUS_COLUMNS).reset_index(drop=True)
+    )
+
+
+def clean_injuries(raw: pd.DataFrame) -> pd.DataFrame:
+    """Regular-season injury reports that carry a game status (Out/Doubtful/Questionable)."""
+    df = raw[(raw["game_type"] == "REG") & raw["gsis_id"].notna() & raw["report_status"].notna()]
+    return df[list(INJURY_COLUMNS)].rename(columns=INJURY_COLUMNS).reset_index(drop=True)
+
+
 def load_weekly(seasons: Iterable[int], *, refresh: bool = False) -> pd.DataFrame:
     fetch = lambda s: nfl.load_player_stats(seasons=[s], summary_level="week").to_pandas()  # noqa: E731
     return _load("weekly", seasons, fetch, clean_weekly, refresh)
@@ -77,6 +105,16 @@ def load_snaps(seasons: Iterable[int], *, refresh: bool = False) -> pd.DataFrame
 def load_rosters(seasons: Iterable[int], *, refresh: bool = False) -> pd.DataFrame:
     fetch = lambda s: nfl.load_rosters(seasons=[s]).to_pandas()  # noqa: E731
     return _load("rosters", seasons, fetch, clean_rosters, refresh)
+
+
+def load_roster_status(season: int) -> pd.DataFrame:
+    """Always a fresh download: roster status changes every week."""
+    return clean_roster_status(nfl.load_rosters_weekly([season]).to_pandas())
+
+
+def load_injuries(season: int) -> pd.DataFrame:
+    """Always a fresh download: injury reports are republished every week."""
+    return clean_injuries(nfl.load_injuries([season]).to_pandas())
 
 
 def load_schedule(season: int) -> pd.DataFrame:
