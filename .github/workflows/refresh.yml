@@ -31,6 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.7" # match the Dockerfile and uv_build's range in pyproject.toml
       - run: uv sync --locked
 
       - name: Find completed week
@@ -136,3 +138,13 @@ jobs:
           gcloud run services update-traffic "$SERVICE" --region "$REGION" \
             --to-revisions "$PREVIOUS_REVISION=100"
           exit 1
+
+      - name: Archive served projections
+        if: steps.decide.outputs.deploy == 'true'
+        env:
+          WEEK: ${{ steps.week.outputs.completed }}
+        # Kept for live accuracy tracking. The deploy account may create objects but not
+        # delete or overwrite them, so --no-clobber keeps the first build served for a week.
+        run: |
+          gcloud storage cp --no-clobber data/projections.parquet \
+            "gs://statline-mcp-data/archive/projections_${SEASON}_w${WEEK}.parquet"

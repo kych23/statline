@@ -198,3 +198,7 @@ gh workflow run refresh.yml -f force=true   # redeploy even if unchanged, e.g. a
 - **Private data:** ADP and the week-0 projections (used by the mock draft board) are
   gitignored and live in a private Cloud Storage bucket; the workflow copies them in before
   building. Bump `SEASON` and the file names in the workflow each season.
+- **Archive:** after a successful deploy, the served file is copied to
+  `archive/projections_<season>_w<week>.parquet` in the same bucket, for live accuracy tracking.
+  The deploy account can create objects there but not delete or overwrite them, so the first
+  build served for each week is the one kept.
