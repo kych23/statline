@@ -7,11 +7,18 @@ import pytest
 from fastmcp import Client
 
 from statline.draft.board import build_board
+from statline.draft.league import League
 from statline.server.app import build_server
 from statline.server.data import ServerData
 from statline.server.limits import HeavyToolGate
 from statline.server.resolve import resolve
-from statline.server.tools import get_player, mock_draft, rankings
+from statline.server.tools import (
+    WEEKLY_STATUS_NOTE,
+    analyst_notes,
+    get_player,
+    mock_draft,
+    rankings,
+)
 
 
 def name_of(data: ServerData, index: int | None) -> str:
@@ -229,11 +236,30 @@ def test_load_builds_board_from_preseason_files(
         ServerData.load(current, league_path, proj_path, adp_path)
 
 
-def test_projection_outputs_say_the_range_is_for_the_season_average(data: ServerData) -> None:
+def test_projection_outputs_carry_analyst_notes(data: ServerData) -> None:
     """Claude described p10/p90 as single-week floor/ceiling; every output now says otherwise."""
     for out in (get_player(data, ["Gibbs"]), rankings(data, top_n=3)):
-        assert "AVERAGE" in out["projection_note"]
-        assert "not single-week" in out["projection_note"]
+        notes = out["analyst_notes"]
+        assert any("not a weekly floor or ceiling" in n for n in notes)
+        assert any("1.5" in n for n in notes)
+        assert any("12-team" in n and "1 FLEX" in n for n in notes)
+        assert WEEKLY_STATUS_NOTE in notes
+        assert "projection_note" not in out
+
+
+def test_analyst_notes_format_starters_from_the_league() -> None:
+    league = League(
+        teams=10,
+        rounds=8,
+        slots={"QB": 1, "RB": 2, "WR": 0, "TE": 1, "K": 1, "DST": 1, "BENCH": 2},
+        flex_eligible=("RB", "WR", "TE"),
+        max_per_position={},
+    )
+    notes = analyst_notes(league)
+    assert len(notes) == 4
+    assert "vor assumes a 10-team league starting 1 QB, 2 RB and 1 TE;" in notes[2]
+    solo = League(2, 1, {"QB": 1}, ("RB",), {})
+    assert "starting 1 QB;" in analyst_notes(solo)[2]
 
 
 def test_tools_include_availability_and_injury(data: ServerData) -> None:

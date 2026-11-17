@@ -8,7 +8,13 @@ import pandas as pd
 import pytest
 
 from statline.server.data import ServerData
-from statline.server.league import ATTRIBUTION, free_agents, my_league
+from statline.server.league import (
+    ATTRIBUTION,
+    LIVE_STATUS_NOTE,
+    WAIVER_NOTE,
+    free_agents,
+    my_league,
+)
 from statline.yahoo.client import TTLCache, YahooClient
 
 FIXTURES = Path(__file__).parent / "fixtures" / "yahoo"
@@ -90,6 +96,9 @@ async def test_my_league_auto_picks_single_league_and_matches_roster(data: Serve
     assert out["league_key"] == KEY
     assert out["scoring"] == {"ppr": "full", "reception_points": 1.0}
     assert "warning" not in out
+    assert LIVE_STATUS_NOTE in out["analyst_notes"]
+    assert WAIVER_NOTE not in out["analyst_notes"]
+    assert "projection_note" not in out
     assert out["my_team"]["team_key"] == f"{KEY}.t.1"
     allen, nobody = out["roster"]
     allen_vor = float(data.projections.set_index("name")["vor"]["Josh Allen"])
@@ -157,6 +166,9 @@ async def test_free_agents_rank_by_vor_and_count_unprojected(data: ServerData) -
     ]
     client, _ = make_client(lambda p: players_payload(rows) if "/players" in p else None)
     out = await free_agents(data, client, KEY, None, 3)
+    assert WAIVER_NOTE in out["analyst_notes"]
+    assert LIVE_STATUS_NOTE in out["analyst_notes"]
+    assert "projection_note" not in out
     vor = data.projections.set_index("name")["vor"]
     expected = sorted(
         ["Josh Jacobs", "Tyler Williams", "Brock Bowers", "Mike Williams"], key=lambda n: -vor[n]

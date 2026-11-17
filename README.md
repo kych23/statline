@@ -177,7 +177,8 @@ nothing else.
 ## Weekly refresh
 
 `.github/workflows/refresh.yml` rebuilds and redeploys the projections every Tuesday at
-15:00 UTC (after Monday Night Football). It reads the completed regular-season weeks from
+15:00 UTC (after Monday Night Football; a Wednesday run is a backup for GitHub's best-effort cron
+and is a no-op when the week is unchanged). It reads the completed regular-season weeks from
 the nflverse schedule, skips if that week is already live (`/health` `as_of_week`), and
 otherwise builds the projections, checks them, builds the image, deploys it to Cloud Run
 and smoke-tests `/health`. A deploy only swaps the image: env vars, secrets and scaling

@@ -14,7 +14,7 @@ from pydantic import Field
 from statline.data.adp import name_key
 from statline.server import auth
 from statline.server.data import ServerData
-from statline.server.tools import PROJECTION_NOTE, Position, as_of, bad_request
+from statline.server.tools import Position, analyst_notes, as_of, bad_request
 from statline.yahoo.client import (
     TTLCache,
     YahooAuthError,
@@ -44,6 +44,15 @@ FREE_AGENT_FETCH = 50
 THROTTLE_RETRY_AFTER_S = 60
 NON_PPR_WARNING = "projections are full-PPR points per game"
 APP_ACCESS_URL = "https://login.yahoo.com/account/security/app-access"
+LIVE_STATUS_NOTE = (
+    "status here is Yahoo's live status and beats Statline's weekly status; "
+    "a player is on bye when bye_week equals current_week."
+)
+WAIVER_NOTE = (
+    "judge a pickup against the user's weakest starter at that position (from my_league), "
+    "not the bench; it matters only if it beats that starter or covers an upcoming bye "
+    "or injury."
+)
 
 
 class _Matcher:
@@ -153,7 +162,7 @@ async def _my_league(
         "my_team": team,
         "roster": roster,
         "as_of": as_of(data),
-        "projection_note": PROJECTION_NOTE,
+        "analyst_notes": [*analyst_notes(data.league), LIVE_STATUS_NOTE],
         "attribution": ATTRIBUTION,
     }
 
@@ -212,7 +221,7 @@ async def _free_agents(
         "free_agents": [row for _, row in matched[:top_n]],
         "unprojected": len(available) - len(matched),
         "as_of": as_of(data),
-        "projection_note": PROJECTION_NOTE,
+        "analyst_notes": [*analyst_notes(data.league), LIVE_STATUS_NOTE, WAIVER_NOTE],
         "attribution": ATTRIBUTION,
     }
 
@@ -254,7 +263,8 @@ def register_league(
         carries a projection (p10/p50/p90: rest-of-season average PPR points per game, not
         weekly scores) and vor (value over replacement, same unit); null if unprojected.
         bye_week vs current_week tells whether a player is on bye; ir_eligible is Yahoo's own
-        IR eligibility for this league; ir_slots counts IR spots total and used."""
+        IR eligibility for this league; ir_slots counts IR spots total and used. Follow the
+        analyst_notes in the response when answering."""
         if (ctx := client_for()) is None:
             return login_required
         return await my_league(data, ctx[0], league_key)
@@ -279,7 +289,8 @@ def register_league(
         from Yahoo's 50 most-owned available players; 'unprojected' counts the ones skipped
         for lacking a projection. bye_week vs current_week tells whether a player is on bye;
         ir_eligible is Yahoo's own IR eligibility for this league. Compare against the user's
-        weakest starter from my_league."""
+        weakest starter from my_league. Follow the analyst_notes in the response when
+        answering."""
         if (ctx := client_for()) is None:
             return login_required
         return await free_agents(data, ctx[0], league_key, position, top_n)

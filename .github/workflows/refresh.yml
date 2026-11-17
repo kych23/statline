@@ -3,6 +3,7 @@ name: Refresh projections
 on:
   schedule:
     - cron: "0 15 * * 2" # Tuesday 15:00 UTC, after Monday Night Football
+    - cron: "0 15 * * 3" # Wednesday backup: GitHub cron is best-effort; an unchanged week is a no-op
   workflow_dispatch:
     inputs:
       force:

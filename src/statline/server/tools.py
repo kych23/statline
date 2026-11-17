@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_access_token
 from pydantic import Field
 
+from statline.draft.league import League
 from statline.draft.mock import mock_draft as run_mock_draft
 from statline.server.data import ServerData
 from statline.server.limits import Busy, HeavyToolGate, OverQuota, quota_caller
@@ -17,15 +18,41 @@ from statline.server.resolve import resolve
 Position = Literal["QB", "RB", "WR", "TE"]
 SortBy = Literal["vor", "p50"]
 MAX_NAMES = 8
-# Claude read p10/p90 as "bad week / great week"; they bound the season-long average.
-PROJECTION_NOTE = (
-    "p10/p50/p90 are the 10th/50th/90th percentiles of the player's AVERAGE PPR points per game "
-    "over the rest of the season (an 80% range for that average), not single-week scores, "
-    "which swing far more."
+# Both come from the README backtest MAE table.
+CLOSE_CALL_PPG = 1.5
+TYPICAL_ERROR_PPG = (2.5, 3.3)
+WEEKLY_STATUS_NOTE = (
+    "availability and injury come from the weekly build (status_as_of_week) and can lag "
+    "game-day news; check before recommending a player and name a pivot for Questionable "
+    "or Doubtful players."
 )
+STARTER_SLOTS = ("QB", "RB", "WR", "TE", "FLEX")
 MAX_TOP_N = 50
 MAX_SEED = 2**31 - 1
 BUSY_RETRY_AFTER_S = 15
+
+
+def _starters_text(league: League) -> str:
+    parts = [f"{league.slots[s]} {s}" for s in STARTER_SLOTS if league.slots.get(s, 0) > 0]
+    return parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])} and {parts[-1]}"
+
+
+def analyst_notes(league: League) -> list[str]:
+    """Prescriptive guidance for the model, carried in outputs because claude.ai does not
+    show it the server instructions."""
+    low, high = TYPICAL_ERROR_PPG
+    return [
+        "p10-p90 is an 80% range for the player's rest-of-season AVERAGE PPR points per game, "
+        "not a weekly floor or ceiling. Never call p10 a worst case or floor, or p90 a ceiling "
+        "or boom week; single games swing far more.",
+        f"p50 gaps under {CLOSE_CALL_PPG} points per game are within typical projection error "
+        f"({low}-{high}): call them a close call and break the tie on role, health, bye or "
+        "schedule, not the decimal.",
+        f"vor assumes a {league.teams}-team league starting {_starters_text(league)}; "
+        "in other formats lean on p50.",
+        "Call a tool before quoting any number; never invent projections or cite average "
+        "draft position.",
+    ]
 
 
 def bad_request(message: str) -> dict[str, Any]:
@@ -87,7 +114,7 @@ def get_player(data: ServerData, names: list[str]) -> dict[str, Any]:
         "unresolved": unresolved,
         "as_of": as_of(data),
         "status_as_of_week": data.status_as_of,
-        "projection_note": PROJECTION_NOTE,
+        "analyst_notes": [*analyst_notes(data.league), WEEKLY_STATUS_NOTE],
     }
     if len(players) >= 2:
         ordered = sorted(players, key=lambda p: p["projection"]["p50"], reverse=True)
@@ -132,7 +159,7 @@ def rankings(
         "sort_by": sort_by,
         "as_of": as_of(data),
         "status_as_of_week": data.status_as_of,
-        "projection_note": PROJECTION_NOTE,
+        "analyst_notes": [*analyst_notes(data.league), WEEKLY_STATUS_NOTE],
     }
 
 
@@ -202,7 +229,8 @@ def register(server: FastMCP, data: ServerData, gate: HeavyToolGate) -> None:
         plus value over replacement and position rank, and availability (roster status) and
         injury report. Availability/injury come from nflverse as of the projection build
         (refreshed weekly, may lag game-day news; league tools carry Yahoo's live status).
-        Two or more players also get a comparison against the best one."""
+        Two or more players also get a comparison against the best one. Follow the
+        analyst_notes in the response when answering."""
         return get_player(data, names)
 
     @server.tool(name="rankings", title="Player rankings", annotations=read_only)
@@ -220,7 +248,7 @@ def register(server: FastMCP, data: ServerData, gate: HeavyToolGate) -> None:
         80% range for that average, not single-week scores), ranked by value over replacement
         or median projection. Each player carries availability and injury (from nflverse as of
         the build, refreshed weekly, may lag game-day news; league tools carry Yahoo's live
-        status)."""
+        status). Follow the analyst_notes in the response when answering."""
         return rankings(data, position, top_n, sort_by)
 
     @server.tool(name="mock_draft", title="Mock draft", annotations=read_only)
