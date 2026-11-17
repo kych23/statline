@@ -15,6 +15,7 @@ from statline.server.app import build_server, mock_gate
 from statline.server.auth import build_auth
 from statline.server.auth_config import AuthConfig
 from statline.server.data import ServerData
+from statline.server.instructions import LEAGUE_INSTRUCTIONS
 from statline.server.league import ATTRIBUTION, register_league
 from statline.server.usage import UsageMiddleware, usage_key
 from statline.yahoo.client import TTLCache
@@ -138,6 +139,7 @@ def build_http_app(
             data,
             gate,
             name="statline-league",
+            instructions=LEAGUE_INSTRUCTIONS,
             auth=proxy,
             usage=UsageMiddleware("league", key),
         )

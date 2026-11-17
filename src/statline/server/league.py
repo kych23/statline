@@ -249,7 +249,8 @@ def register_league(
             ),
         ] = None,
     ) -> dict[str, Any]:
-        """Your Yahoo fantasy league: scoring, standings and your roster. Each rostered player
+        """Call first for any question about the user's own team (start/sit, waivers, trades).
+        Your Yahoo fantasy league: scoring, standings and your roster. Each rostered player
         carries a projection (p10/p50/p90: rest-of-season average PPR points per game, not
         weekly scores) and vor (value over replacement, same unit); null if unprojected.
         bye_week vs current_week tells whether a player is on bye; ir_eligible is Yahoo's own
@@ -277,7 +278,8 @@ def register_league(
         range for the average, not weekly scores). Draws
         from Yahoo's 50 most-owned available players; 'unprojected' counts the ones skipped
         for lacking a projection. bye_week vs current_week tells whether a player is on bye;
-        ir_eligible is Yahoo's own IR eligibility for this league."""
+        ir_eligible is Yahoo's own IR eligibility for this league. Compare against the user's
+        weakest starter from my_league."""
         if (ctx := client_for()) is None:
             return login_required
         return await free_agents(data, ctx[0], league_key, position, top_n)
